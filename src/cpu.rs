@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    instruction::{AddressingMode, Instruction},
+    instruction::{AddressingMode, Instruction, Mnemonic},
     memory::Memory,
 };
 
@@ -123,10 +123,112 @@ impl<M: Memory> CPU<M> {
 
         if let Some(instruction) = Instruction::from_opcode(opcode) {
             println!("Executing: {instruction:?}...");
-            instruction.exec(self);
+            self.exec(instruction);
             Ok(())
         } else {
             Err(anyhow!("Invalid or unimplemented opcode: {opcode}"))
+        }
+    }
+
+    /// return: cycles this instruction took
+    pub fn exec(&mut self, instruction: Instruction) -> usize {
+        match instruction {
+            Instruction(Mnemonic::ADC, _) | Instruction(Mnemonic::SBC, _) => {
+                self.adc_sbc(instruction) + instruction.cycles()
+            }
+            Instruction(Mnemonic::CPX, _)
+            | Instruction(Mnemonic::CPY, _)
+            | Instruction(Mnemonic::CMP, _) => self.compare(instruction) + instruction.cycles(),
+        }
+    }
+
+    /// return: page cross penalty
+    #[inline]
+    fn adc_sbc(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            instruction.0 == Mnemonic::ADC || instruction.0 == Mnemonic::SBC,
+            "Invalid Instruction given to adc_sbc: {instruction:?}",
+        );
+
+        let operand_1 = self.a;
+
+        let (operand_2, penalty) = self.fetch(instruction.1);
+        let operand_2 = if instruction.0 == Mnemonic::SBC {
+            (!operand_2).wrapping_add(1)
+        } else {
+            operand_2
+        };
+
+        let carry_val = if self.flag_get_carry() { 1 } else { 0 };
+        let result = operand_1.wrapping_add(operand_2).wrapping_add(carry_val);
+        self.a = result;
+
+        self.flag_set_zero(result);
+        self.flag_set_negative(result);
+        self.flag_set_carry(result < operand_1 || (operand_2 == 0xFF && carry_val == 1));
+        self.flag_set_overflow(operand_1, operand_2, result);
+        penalty
+    }
+
+    #[inline]
+    fn compare(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            instruction.0 == Mnemonic::CPX
+                || instruction.0 == Mnemonic::CPY
+                || instruction.0 == Mnemonic::CMP,
+            "Invalid Instruction given to compare: {instruction:?}",
+        );
+
+        let operand_1 = match instruction.0 {
+            Mnemonic::CPX => self.x,
+            Mnemonic::CPY => self.y,
+            _ => self.a,
+        };
+        let (operand_2, penalty) = self.fetch(instruction.1);
+        let operand_2 = (!operand_2).wrapping_add(1);
+
+        let result = operand_1.wrapping_add(operand_2).wrapping_add(1);
+
+        self.flag_set_zero(result);
+        self.flag_set_negative(result);
+        self.flag_set_carry(result < operand_1 || operand_2 == 0xFF);
+
+        penalty
+    }
+
+    fn flag_get_carry(&self) -> bool {
+        (self.sr & FLAG_CRY) != 0
+    }
+
+    fn flag_set_zero(&mut self, result: u8) {
+        if result == 0 {
+            self.sr |= FLAG_ZRO
+        } else {
+            self.sr &= !FLAG_ZRO
+        }
+    }
+
+    fn flag_set_negative(&mut self, result: u8) {
+        if result & 0x80 != 0 {
+            self.sr |= FLAG_NEG
+        } else {
+            self.sr &= !FLAG_NEG
+        }
+    }
+
+    fn flag_set_carry(&mut self, carry: bool) {
+        if carry {
+            self.sr |= FLAG_CRY
+        } else {
+            self.sr &= !FLAG_CRY
+        }
+    }
+
+    fn flag_set_overflow(&mut self, a: u8, b: u8, result: u8) {
+        if (a ^ result) & (b ^ result) & 0x80 != 0 {
+            self.sr |= FLAG_OVF
+        } else {
+            self.sr &= !FLAG_OVF
         }
     }
 }

@@ -1,8 +1,3 @@
-use crate::{
-    cpu::{CPU, FLAG_CRY, FLAG_NEG, FLAG_OVF, FLAG_ZRO},
-    memory::Memory,
-};
-
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
     Immediate,
@@ -20,46 +15,13 @@ pub enum AddressingMode {
 pub enum Mnemonic {
     ADC,
     SBC,
+    CPX,
+    CPY,
+    CMP,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Instruction(pub Mnemonic, pub AddressingMode);
-
-fn flag_get_carry(sr: &u8) -> bool {
-    (*sr & FLAG_CRY) != 0
-}
-
-fn flag_set_zero(sr: &mut u8, result: u8) {
-    if result == 0 {
-        *sr |= FLAG_ZRO
-    } else {
-        *sr &= !FLAG_ZRO
-    }
-}
-
-fn flag_set_negative(sr: &mut u8, result: u8) {
-    if result & 0x80 != 0 {
-        *sr |= FLAG_NEG
-    } else {
-        *sr &= !FLAG_NEG
-    }
-}
-
-fn flag_set_carry(sr: &mut u8, carry: bool) {
-    if carry {
-        *sr |= FLAG_CRY
-    } else {
-        *sr &= !FLAG_CRY
-    }
-}
-
-fn flag_set_overflow(sr: &mut u8, a: u8, b: u8, result: u8) {
-    if (a ^ result) & (b ^ result) & 0x80 != 0 {
-        *sr |= FLAG_OVF
-    } else {
-        *sr &= !FLAG_OVF
-    }
-}
 
 impl Instruction {
     pub fn from_opcode(opcode: u8) -> Option<Self> {
@@ -82,14 +44,34 @@ impl Instruction {
             0xf9 => Some(Instruction(Mnemonic::SBC, AddressingMode::AbsoluteY)),
             0xe1 => Some(Instruction(Mnemonic::SBC, AddressingMode::IndirectX)),
             0xf1 => Some(Instruction(Mnemonic::SBC, AddressingMode::IndirectY)),
+            // CMP
+            0xc9 => Some(Instruction(Mnemonic::CMP, AddressingMode::Immediate)),
+            0xc5 => Some(Instruction(Mnemonic::CMP, AddressingMode::ZeroPage)),
+            0xd5 => Some(Instruction(Mnemonic::CMP, AddressingMode::ZeroPageX)),
+            0xcd => Some(Instruction(Mnemonic::CMP, AddressingMode::Absolute)),
+            0xdd => Some(Instruction(Mnemonic::CMP, AddressingMode::AbsoluteX)),
+            0xd9 => Some(Instruction(Mnemonic::CMP, AddressingMode::AbsoluteY)),
+            0xc1 => Some(Instruction(Mnemonic::CMP, AddressingMode::IndirectX)),
+            0xd1 => Some(Instruction(Mnemonic::CMP, AddressingMode::IndirectY)),
+            // CPX
+            0xe0 => Some(Instruction(Mnemonic::CPX, AddressingMode::Immediate)),
+            0xe4 => Some(Instruction(Mnemonic::CPX, AddressingMode::ZeroPage)),
+            0xec => Some(Instruction(Mnemonic::CPX, AddressingMode::Absolute)),
+            // CPY
+            0xc0 => Some(Instruction(Mnemonic::CPY, AddressingMode::Immediate)),
+            0xc4 => Some(Instruction(Mnemonic::CPY, AddressingMode::ZeroPage)),
+            0xcc => Some(Instruction(Mnemonic::CPY, AddressingMode::Absolute)),
             _ => None,
         }
     }
 
-    fn cycles(self) -> usize {
+    pub fn cycles(self) -> usize {
         match self {
             Instruction(Mnemonic::ADC, addressing_mode)
-            | Instruction(Mnemonic::SBC, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::SBC, addressing_mode)
+            | Instruction(Mnemonic::CPX, addressing_mode)
+            | Instruction(Mnemonic::CPY, addressing_mode)
+            | Instruction(Mnemonic::CMP, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
@@ -101,38 +83,5 @@ impl Instruction {
                 AddressingMode::IndirectY => 5,
             },
         }
-    }
-
-    /// return: cycles this instruction took
-    pub fn exec<M: Memory>(self, cpu: &mut CPU<M>) -> usize {
-        match self {
-            Instruction(Mnemonic::ADC, _) | Instruction(Mnemonic::SBC, _) => {
-                self.adc_sbc(cpu) + self.cycles()
-            }
-        }
-    }
-
-    /// return: page cross penalty
-    #[inline]
-    fn adc_sbc<M: Memory>(self, cpu: &mut CPU<M>) -> usize {
-        let operand_1 = cpu.a;
-
-        let (operand_2, penalty) = cpu.fetch(self.1);
-        let operand_2 = if self.0 == Mnemonic::SBC {
-            (!operand_2) + 1
-        } else {
-            operand_2
-        };
-
-        let result = operand_1
-            .wrapping_add(operand_2)
-            .wrapping_add(if flag_get_carry(&cpu.sr) { 1 } else { 0 });
-        cpu.a = result;
-
-        flag_set_zero(&mut cpu.sr, result);
-        flag_set_negative(&mut cpu.sr, result);
-        flag_set_carry(&mut cpu.sr, result < operand_1);
-        flag_set_overflow(&mut cpu.sr, operand_1, operand_2, result);
-        penalty
     }
 }
