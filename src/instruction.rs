@@ -13,11 +13,17 @@ pub enum AddressingMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mnemonic {
+    // arithmetic
     ADC,
     SBC,
+    // compare
     CPX,
     CPY,
     CMP,
+    // logic
+    AND,
+    EOR,
+    ORA,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,6 +67,33 @@ impl Instruction {
             0xc0 => Some(Instruction(Mnemonic::CPY, AddressingMode::Immediate)),
             0xc4 => Some(Instruction(Mnemonic::CPY, AddressingMode::ZeroPage)),
             0xcc => Some(Instruction(Mnemonic::CPY, AddressingMode::Absolute)),
+            // AND
+            0x29 => Some(Instruction(Mnemonic::AND, AddressingMode::Immediate)),
+            0x25 => Some(Instruction(Mnemonic::AND, AddressingMode::ZeroPage)),
+            0x35 => Some(Instruction(Mnemonic::AND, AddressingMode::ZeroPageX)),
+            0x2d => Some(Instruction(Mnemonic::AND, AddressingMode::Absolute)),
+            0x3d => Some(Instruction(Mnemonic::AND, AddressingMode::AbsoluteX)),
+            0x39 => Some(Instruction(Mnemonic::AND, AddressingMode::AbsoluteY)),
+            0x21 => Some(Instruction(Mnemonic::AND, AddressingMode::IndirectX)),
+            0x31 => Some(Instruction(Mnemonic::AND, AddressingMode::IndirectY)),
+            // EOR
+            0x49 => Some(Instruction(Mnemonic::EOR, AddressingMode::Immediate)),
+            0x45 => Some(Instruction(Mnemonic::EOR, AddressingMode::ZeroPage)),
+            0x55 => Some(Instruction(Mnemonic::EOR, AddressingMode::ZeroPageX)),
+            0x4d => Some(Instruction(Mnemonic::EOR, AddressingMode::Absolute)),
+            0x5d => Some(Instruction(Mnemonic::EOR, AddressingMode::AbsoluteX)),
+            0x59 => Some(Instruction(Mnemonic::EOR, AddressingMode::AbsoluteY)),
+            0x41 => Some(Instruction(Mnemonic::EOR, AddressingMode::IndirectX)),
+            0x51 => Some(Instruction(Mnemonic::EOR, AddressingMode::IndirectY)),
+            // ORA
+            0x09 => Some(Instruction(Mnemonic::ORA, AddressingMode::Immediate)),
+            0x05 => Some(Instruction(Mnemonic::ORA, AddressingMode::ZeroPage)),
+            0x15 => Some(Instruction(Mnemonic::ORA, AddressingMode::ZeroPageX)),
+            0x0d => Some(Instruction(Mnemonic::ORA, AddressingMode::Absolute)),
+            0x1d => Some(Instruction(Mnemonic::ORA, AddressingMode::AbsoluteX)),
+            0x19 => Some(Instruction(Mnemonic::ORA, AddressingMode::AbsoluteY)),
+            0x01 => Some(Instruction(Mnemonic::ORA, AddressingMode::IndirectX)),
+            0x11 => Some(Instruction(Mnemonic::ORA, AddressingMode::IndirectY)),
             _ => None,
         }
     }
@@ -71,7 +104,10 @@ impl Instruction {
             | Instruction(Mnemonic::SBC, addressing_mode)
             | Instruction(Mnemonic::CPX, addressing_mode)
             | Instruction(Mnemonic::CPY, addressing_mode)
-            | Instruction(Mnemonic::CMP, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::CMP, addressing_mode)
+            | Instruction(Mnemonic::AND, addressing_mode)
+            | Instruction(Mnemonic::EOR, addressing_mode)
+            | Instruction(Mnemonic::ORA, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX

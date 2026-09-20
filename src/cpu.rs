@@ -132,13 +132,14 @@ impl<M: Memory> CPU<M> {
 
     /// return: cycles this instruction took
     pub fn exec(&mut self, instruction: Instruction) -> usize {
-        match instruction {
-            Instruction(Mnemonic::ADC, _) | Instruction(Mnemonic::SBC, _) => {
-                self.adc_sbc(instruction) + instruction.cycles()
+        match instruction.0 {
+            Mnemonic::ADC | Mnemonic::SBC => self.adc_sbc(instruction) + instruction.cycles(),
+            Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => {
+                self.compare(instruction) + instruction.cycles()
             }
-            Instruction(Mnemonic::CPX, _)
-            | Instruction(Mnemonic::CPY, _)
-            | Instruction(Mnemonic::CMP, _) => self.compare(instruction) + instruction.cycles(),
+            Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
+                self.logic(instruction) + instruction.cycles()
+            }
         }
     }
 
@@ -192,6 +193,31 @@ impl<M: Memory> CPU<M> {
         self.flag_set_zero(result);
         self.flag_set_negative(result);
         self.flag_set_carry(result < operand_1 || operand_2 == 0xFF);
+
+        penalty
+    }
+
+    #[inline]
+    fn logic(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            instruction.0 == Mnemonic::AND
+                || instruction.0 == Mnemonic::EOR
+                || instruction.0 == Mnemonic::ORA,
+            "Invalid Instruction given to logic: {instruction:?}"
+        );
+
+        let operand_1 = self.a;
+        let (operand_2, penalty) = self.fetch(instruction.1);
+
+        let result = match instruction.0 {
+            Mnemonic::AND => operand_1 & operand_2,
+            Mnemonic::EOR => operand_1 ^ operand_2,
+            _ => operand_1 | operand_2,
+        };
+        self.a = result;
+
+        self.flag_set_zero(result);
+        self.flag_set_negative(result);
 
         penalty
     }
