@@ -1,3 +1,5 @@
+use crate::instruction::AddressingMode::IndirectX;
+
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
     Immediate,
@@ -24,12 +26,19 @@ pub enum Mnemonic {
     AND,
     EOR,
     ORA,
+    // bit test
+    BIT,
+    // store
+    STA,
+    STX,
+    STY,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Instruction(pub Mnemonic, pub AddressingMode);
 
 impl Instruction {
+    #[inline]
     pub fn from_opcode(opcode: u8) -> Option<Self> {
         match opcode {
             // ADC
@@ -94,10 +103,30 @@ impl Instruction {
             0x19 => Some(Instruction(Mnemonic::ORA, AddressingMode::AbsoluteY)),
             0x01 => Some(Instruction(Mnemonic::ORA, AddressingMode::IndirectX)),
             0x11 => Some(Instruction(Mnemonic::ORA, AddressingMode::IndirectY)),
+            // BIT
+            0x24 => Some(Instruction(Mnemonic::BIT, AddressingMode::ZeroPage)),
+            0x2c => Some(Instruction(Mnemonic::BIT, AddressingMode::Absolute)),
+            // STA
+            0x85 => Some(Instruction(Mnemonic::STA, AddressingMode::ZeroPage)),
+            0x95 => Some(Instruction(Mnemonic::STA, AddressingMode::ZeroPageX)),
+            0x8d => Some(Instruction(Mnemonic::STA, AddressingMode::Absolute)),
+            0x9d => Some(Instruction(Mnemonic::STA, AddressingMode::AbsoluteX)),
+            0x99 => Some(Instruction(Mnemonic::STA, AddressingMode::AbsoluteY)),
+            0x81 => Some(Instruction(Mnemonic::STA, AddressingMode::IndirectX)),
+            0x91 => Some(Instruction(Mnemonic::STA, AddressingMode::IndirectY)),
+            // STX
+            0x86 => Some(Instruction(Mnemonic::STX, AddressingMode::ZeroPage)),
+            0x96 => Some(Instruction(Mnemonic::STX, AddressingMode::ZeroPageY)),
+            0x8e => Some(Instruction(Mnemonic::STX, AddressingMode::Absolute)),
+            // STY
+            0x84 => Some(Instruction(Mnemonic::STY, AddressingMode::ZeroPage)),
+            0x94 => Some(Instruction(Mnemonic::STY, AddressingMode::ZeroPageX)),
+            0x8c => Some(Instruction(Mnemonic::STY, AddressingMode::Absolute)),
             _ => None,
         }
     }
 
+    #[inline]
     pub fn cycles(self) -> usize {
         match self {
             Instruction(Mnemonic::ADC, addressing_mode)
@@ -107,7 +136,11 @@ impl Instruction {
             | Instruction(Mnemonic::CMP, addressing_mode)
             | Instruction(Mnemonic::AND, addressing_mode)
             | Instruction(Mnemonic::EOR, addressing_mode)
-            | Instruction(Mnemonic::ORA, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::ORA, addressing_mode)
+            | Instruction(Mnemonic::BIT, addressing_mode)
+            | Instruction(Mnemonic::STA, addressing_mode)
+            | Instruction(Mnemonic::STX, addressing_mode)
+            | Instruction(Mnemonic::STY, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
@@ -119,5 +152,15 @@ impl Instruction {
                 AddressingMode::IndirectY => 5,
             },
         }
+    }
+
+    #[inline]
+    pub fn mode(self) -> AddressingMode {
+        self.1
+    }
+
+    #[inline]
+    pub fn mnemonic(self) -> Mnemonic {
+        self.0
     }
 }

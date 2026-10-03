@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    instruction::{AddressingMode, Instruction, Mnemonic},
+    instruction::{self, AddressingMode, Instruction, Mnemonic},
     memory::Memory,
 };
 
@@ -100,6 +100,7 @@ impl<M: Memory> CPU<M> {
     }
 
     /// return: (value, page cross penalty value)
+    #[inline]
     pub fn fetch(&mut self, addressing_mode: AddressingMode) -> (u8, usize) {
         let (addr, penalty) = self.resolve_address(addressing_mode);
         match addressing_mode {
@@ -114,6 +115,35 @@ impl<M: Memory> CPU<M> {
             }
         };
         (self.memory.read_byte(addr), penalty)
+    }
+
+    /// return: penalty
+    #[inline]
+    pub fn write(&mut self, addressing_mode: AddressingMode, byte: u8) -> usize {
+        let (addr, _) = self.resolve_address(addressing_mode);
+        match addressing_mode {
+            AddressingMode::Immediate
+            | AddressingMode::ZeroPage
+            | AddressingMode::ZeroPageX
+            | AddressingMode::ZeroPageY
+            | AddressingMode::IndirectX
+            | AddressingMode::IndirectY => self.pc = self.pc.wrapping_add(1),
+            AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
+                self.pc = self.pc.wrapping_add(2)
+            }
+        };
+        self.memory.write_byte(addr, byte);
+
+        // penalty always taken when one is possible
+        match addressing_mode {
+            AddressingMode::Immediate
+            | AddressingMode::ZeroPage
+            | AddressingMode::ZeroPageX
+            | AddressingMode::ZeroPageY
+            | AddressingMode::Absolute
+            | AddressingMode::IndirectX => 0,
+            AddressingMode::AbsoluteY | AddressingMode::AbsoluteX | AddressingMode::IndirectY => 1,
+        }
     }
 
     pub fn step(&mut self) -> Result<()> {
@@ -131,8 +161,9 @@ impl<M: Memory> CPU<M> {
     }
 
     /// return: cycles this instruction took
-    pub fn exec(&mut self, instruction: Instruction) -> usize {
-        match instruction.0 {
+    #[inline]
+    fn exec(&mut self, instruction: Instruction) -> usize {
+        match instruction.mnemonic() {
             Mnemonic::ADC | Mnemonic::SBC => self.adc_sbc(instruction) + instruction.cycles(),
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => {
                 self.compare(instruction) + instruction.cycles()
@@ -140,6 +171,8 @@ impl<M: Memory> CPU<M> {
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
                 self.logic(instruction) + instruction.cycles()
             }
+            Mnemonic::BIT => self.bit(instruction),
+            Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => self.store(instruction),
         }
     }
 
@@ -147,17 +180,17 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn adc_sbc(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
-            instruction.0 == Mnemonic::ADC || instruction.0 == Mnemonic::SBC,
+            instruction.mnemonic() == Mnemonic::ADC || instruction.mnemonic() == Mnemonic::SBC,
             "Invalid Instruction given to adc_sbc: {instruction:?}",
         );
 
         let operand_1 = self.a;
 
-        let (operand_2, penalty) = self.fetch(instruction.1);
-        let operand_2 = if instruction.0 == Mnemonic::SBC {
-            (!operand_2).wrapping_add(1)
-        } else {
-            operand_2
+        let (operand_2, penalty) = self.fetch(instruction.mode());
+        let operand_2 = match instruction.mnemonic() {
+            Mnemonic::ADC => operand_2,
+            Mnemonic::SBC => (!operand_2).wrapping_add(1),
+            _ => unreachable!(),
         };
 
         let carry_val = if self.flag_get_carry() { 1 } else { 0 };
@@ -174,18 +207,19 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn compare(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
-            instruction.0 == Mnemonic::CPX
-                || instruction.0 == Mnemonic::CPY
-                || instruction.0 == Mnemonic::CMP,
+            instruction.mnemonic() == Mnemonic::CPX
+                || instruction.mnemonic() == Mnemonic::CPY
+                || instruction.mnemonic() == Mnemonic::CMP,
             "Invalid Instruction given to compare: {instruction:?}",
         );
 
-        let operand_1 = match instruction.0 {
+        let operand_1 = match instruction.mnemonic() {
             Mnemonic::CPX => self.x,
             Mnemonic::CPY => self.y,
-            _ => self.a,
+            Mnemonic::CMP => self.a,
+            _ => unreachable!(),
         };
-        let (operand_2, penalty) = self.fetch(instruction.1);
+        let (operand_2, penalty) = self.fetch(instruction.mode());
         let operand_2 = (!operand_2).wrapping_add(1);
 
         let result = operand_1.wrapping_add(operand_2).wrapping_add(1);
@@ -200,26 +234,64 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn logic(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
-            instruction.0 == Mnemonic::AND
-                || instruction.0 == Mnemonic::EOR
-                || instruction.0 == Mnemonic::ORA,
+            instruction.mnemonic() == Mnemonic::AND
+                || instruction.mnemonic() == Mnemonic::EOR
+                || instruction.mnemonic() == Mnemonic::ORA,
             "Invalid Instruction given to logic: {instruction:?}"
         );
 
         let operand_1 = self.a;
-        let (operand_2, penalty) = self.fetch(instruction.1);
+        let (operand_2, penalty) = self.fetch(instruction.mode());
 
-        let result = match instruction.0 {
+        let result = match instruction.mnemonic() {
             Mnemonic::AND => operand_1 & operand_2,
             Mnemonic::EOR => operand_1 ^ operand_2,
-            _ => operand_1 | operand_2,
+            Mnemonic::ORA => operand_1 | operand_2,
+            _ => unreachable!(),
         };
-        self.a = result;
 
+        self.a = result;
         self.flag_set_zero(result);
         self.flag_set_negative(result);
 
         penalty
+    }
+
+    #[inline]
+    fn bit(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::BIT),
+            "Invalid Instruction given to bit: {instruction:?}"
+        );
+
+        let operand_1 = self.a;
+        let (operand_2, penalty) = self.fetch(instruction.mode());
+
+        self.flag_set_zero(operand_1 & operand_2);
+        self.sr &= 0b0011_1111;
+        self.sr |= operand_2 & 0b1100_0000;
+
+        penalty
+    }
+
+    #[inline]
+    fn store(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::STA | Mnemonic::STX | Mnemonic::STY
+            ),
+            "Invalid Instruction given to store: {instruction:?}"
+        );
+
+        let operand = match instruction.mnemonic() {
+            Mnemonic::STA => self.a,
+            Mnemonic::STX => self.x,
+            Mnemonic::STY => self.y,
+            _ => unreachable!(),
+        };
+
+        self.write(instruction.mode(), operand)
     }
 
     fn flag_get_carry(&self) -> bool {
