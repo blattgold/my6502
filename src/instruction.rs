@@ -2,6 +2,7 @@ use crate::instruction::AddressingMode::IndirectX;
 
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
+    Implied,
     Immediate,
     ZeroPage,
     ZeroPageX,
@@ -36,10 +37,17 @@ pub enum Mnemonic {
     LDA,
     LDX,
     LDY,
+    // transfer
+    TAX,
+    TAY,
+    TSX,
+    TXA,
+    TXS,
+    TYA,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Instruction(pub Mnemonic, pub AddressingMode);
+pub struct Instruction(Mnemonic, AddressingMode);
 
 impl Instruction {
     #[inline]
@@ -147,6 +155,13 @@ impl Instruction {
             0xb4 => Some(Instruction(Mnemonic::LDY, AddressingMode::ZeroPageX)),
             0xac => Some(Instruction(Mnemonic::LDY, AddressingMode::Absolute)),
             0xbc => Some(Instruction(Mnemonic::LDY, AddressingMode::AbsoluteX)),
+            // TRANSFER
+            0xaa => Some(Instruction(Mnemonic::TAX, AddressingMode::Implied)),
+            0xa8 => Some(Instruction(Mnemonic::TAY, AddressingMode::Implied)),
+            0xba => Some(Instruction(Mnemonic::TSX, AddressingMode::Implied)),
+            0x8a => Some(Instruction(Mnemonic::TXA, AddressingMode::Implied)),
+            0x9a => Some(Instruction(Mnemonic::TXS, AddressingMode::Implied)),
+            0x98 => Some(Instruction(Mnemonic::TYA, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -168,8 +183,14 @@ impl Instruction {
             | Instruction(Mnemonic::STY, addressing_mode)
             | Instruction(Mnemonic::LDA, addressing_mode)
             | Instruction(Mnemonic::LDX, addressing_mode)
-            | Instruction(Mnemonic::LDY, addressing_mode) => match addressing_mode {
-                AddressingMode::Immediate => 2,
+            | Instruction(Mnemonic::LDY, addressing_mode)
+            | Instruction(Mnemonic::TAX, addressing_mode)
+            | Instruction(Mnemonic::TAY, addressing_mode)
+            | Instruction(Mnemonic::TSX, addressing_mode)
+            | Instruction(Mnemonic::TXA, addressing_mode)
+            | Instruction(Mnemonic::TXS, addressing_mode)
+            | Instruction(Mnemonic::TYA, addressing_mode) => match addressing_mode {
+                AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
                 | AddressingMode::ZeroPageY

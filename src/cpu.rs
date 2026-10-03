@@ -1,7 +1,10 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    instruction::{self, AddressingMode, Instruction, Mnemonic},
+    instruction::{
+        self, AddressingMode, Instruction,
+        Mnemonic::{self, TXA, TYA},
+    },
     memory::Memory,
 };
 
@@ -45,6 +48,11 @@ impl<M: Memory> CPU<M> {
     /// return: (address, page cross penalty value)
     #[inline]
     fn resolve_address(&mut self, addressing_mode: AddressingMode) -> (u16, usize) {
+        debug_assert!(
+            !matches!(addressing_mode, AddressingMode::Implied),
+            "invalid AddressingMode given to resolve_address: {addressing_mode:?}"
+        );
+
         match addressing_mode {
             AddressingMode::Immediate => (self.pc, 0),
             AddressingMode::ZeroPage => (self.memory.read_byte(self.pc) as u16, 0),
@@ -96,12 +104,18 @@ impl<M: Memory> CPU<M> {
 
                 (addr_indexed, penalty)
             }
+            AddressingMode::Implied => unreachable!(),
         }
     }
 
     /// return: (value, page cross penalty value)
     #[inline]
     pub fn fetch(&mut self, addressing_mode: AddressingMode) -> (u8, usize) {
+        debug_assert!(
+            !matches!(addressing_mode, AddressingMode::Implied),
+            "invalid AddressingMode given to fetch: {addressing_mode:?}"
+        );
+
         let (addr, penalty) = self.resolve_address(addressing_mode);
         match addressing_mode {
             AddressingMode::Immediate
@@ -113,6 +127,7 @@ impl<M: Memory> CPU<M> {
             AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
                 self.pc = self.pc.wrapping_add(2)
             }
+            AddressingMode::Implied => unreachable!(),
         };
         (self.memory.read_byte(addr), penalty)
     }
@@ -120,6 +135,11 @@ impl<M: Memory> CPU<M> {
     /// return: penalty
     #[inline]
     pub fn write(&mut self, addressing_mode: AddressingMode, byte: u8) -> usize {
+        debug_assert!(
+            !matches!(addressing_mode, AddressingMode::Implied),
+            "invalid AddressingMode given to write: {addressing_mode:?}"
+        );
+
         let (addr, _) = self.resolve_address(addressing_mode);
         match addressing_mode {
             AddressingMode::Immediate
@@ -131,6 +151,7 @@ impl<M: Memory> CPU<M> {
             AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
                 self.pc = self.pc.wrapping_add(2)
             }
+            AddressingMode::Implied => unreachable!(),
         };
         self.memory.write_byte(addr, byte);
 
@@ -143,6 +164,7 @@ impl<M: Memory> CPU<M> {
             | AddressingMode::Absolute
             | AddressingMode::IndirectX => 0,
             AddressingMode::AbsoluteY | AddressingMode::AbsoluteX | AddressingMode::IndirectY => 1,
+            AddressingMode::Implied => unreachable!(),
         }
     }
 
@@ -170,6 +192,12 @@ impl<M: Memory> CPU<M> {
             Mnemonic::BIT => self.bit(instruction),
             Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => self.store(instruction),
             Mnemonic::LDA | Mnemonic::LDX | Mnemonic::LDY => self.load(instruction),
+            Mnemonic::TAX
+            | Mnemonic::TAY
+            | Mnemonic::TSX
+            | Mnemonic::TXA
+            | Mnemonic::TXS
+            | Mnemonic::TYA => self.transfer(instruction),
         }
     }
 
@@ -313,6 +341,49 @@ impl<M: Memory> CPU<M> {
         self.flag_set_zero(byte);
 
         penalty + instruction.cycles()
+    }
+
+    #[inline]
+    fn transfer(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::TAX
+                    | Mnemonic::TSX
+                    | Mnemonic::TAY
+                    | Mnemonic::TXA
+                    | Mnemonic::TXS
+                    | Mnemonic::TYA
+            ),
+            "Invalid Instruction given to transfer: {instruction:?}"
+        );
+
+        let byte = match instruction.mnemonic() {
+            Mnemonic::TAX | Mnemonic::TAY => self.a,
+            Mnemonic::TSX => self.sp,
+            Mnemonic::TXA | Mnemonic::TXS => self.x,
+            Mnemonic::TYA => self.y,
+            _ => unreachable!(),
+        };
+
+        match instruction.mnemonic() {
+            Mnemonic::TXA | Mnemonic::TAY | Mnemonic::TSX | Mnemonic::TAX | Mnemonic::TYA => {
+                self.flag_set_negative(byte);
+                self.flag_set_zero(byte);
+            }
+            Mnemonic::TXS => {}
+            _ => unreachable!(),
+        }
+
+        match instruction.mnemonic() {
+            Mnemonic::TAX | Mnemonic::TSX => self.x = byte,
+            Mnemonic::TAY => self.y = byte,
+            Mnemonic::TXA | Mnemonic::TYA => self.a = byte,
+            Mnemonic::TXS => self.sp = byte,
+            _ => unreachable!(),
+        }
+
+        instruction.cycles()
     }
 
     fn flag_get_carry(&self) -> bool {
