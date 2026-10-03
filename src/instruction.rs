@@ -32,6 +32,10 @@ pub enum Mnemonic {
     STA,
     STX,
     STY,
+    // load
+    LDA,
+    LDX,
+    LDY,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -122,6 +126,27 @@ impl Instruction {
             0x84 => Some(Instruction(Mnemonic::STY, AddressingMode::ZeroPage)),
             0x94 => Some(Instruction(Mnemonic::STY, AddressingMode::ZeroPageX)),
             0x8c => Some(Instruction(Mnemonic::STY, AddressingMode::Absolute)),
+            // LDA
+            0xa9 => Some(Instruction(Mnemonic::LDA, AddressingMode::Immediate)),
+            0xa5 => Some(Instruction(Mnemonic::LDA, AddressingMode::ZeroPage)),
+            0xb5 => Some(Instruction(Mnemonic::LDA, AddressingMode::ZeroPageX)),
+            0xad => Some(Instruction(Mnemonic::LDA, AddressingMode::Absolute)),
+            0xbd => Some(Instruction(Mnemonic::LDA, AddressingMode::AbsoluteX)),
+            0xb9 => Some(Instruction(Mnemonic::LDA, AddressingMode::AbsoluteY)),
+            0xa1 => Some(Instruction(Mnemonic::LDA, AddressingMode::IndirectX)),
+            0xb1 => Some(Instruction(Mnemonic::LDA, AddressingMode::IndirectY)),
+            // LDX
+            0xa2 => Some(Instruction(Mnemonic::LDX, AddressingMode::Immediate)),
+            0xa6 => Some(Instruction(Mnemonic::LDX, AddressingMode::ZeroPage)),
+            0xb6 => Some(Instruction(Mnemonic::LDX, AddressingMode::ZeroPageY)),
+            0xae => Some(Instruction(Mnemonic::LDX, AddressingMode::Absolute)),
+            0xbe => Some(Instruction(Mnemonic::LDX, AddressingMode::AbsoluteY)),
+            // LDY
+            0xa0 => Some(Instruction(Mnemonic::LDY, AddressingMode::Immediate)),
+            0xa4 => Some(Instruction(Mnemonic::LDY, AddressingMode::ZeroPage)),
+            0xb4 => Some(Instruction(Mnemonic::LDY, AddressingMode::ZeroPageX)),
+            0xac => Some(Instruction(Mnemonic::LDY, AddressingMode::Absolute)),
+            0xbc => Some(Instruction(Mnemonic::LDY, AddressingMode::AbsoluteX)),
             _ => None,
         }
     }
@@ -140,7 +165,10 @@ impl Instruction {
             | Instruction(Mnemonic::BIT, addressing_mode)
             | Instruction(Mnemonic::STA, addressing_mode)
             | Instruction(Mnemonic::STX, addressing_mode)
-            | Instruction(Mnemonic::STY, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::STY, addressing_mode)
+            | Instruction(Mnemonic::LDA, addressing_mode)
+            | Instruction(Mnemonic::LDX, addressing_mode)
+            | Instruction(Mnemonic::LDY, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX

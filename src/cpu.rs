@@ -164,19 +164,16 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
         match instruction.mnemonic() {
-            Mnemonic::ADC | Mnemonic::SBC => self.adc_sbc(instruction) + instruction.cycles(),
-            Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => {
-                self.compare(instruction) + instruction.cycles()
-            }
-            Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
-                self.logic(instruction) + instruction.cycles()
-            }
+            Mnemonic::ADC | Mnemonic::SBC => self.adc_sbc(instruction),
+            Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
+            Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
             Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => self.store(instruction),
+            Mnemonic::LDA | Mnemonic::LDX | Mnemonic::LDY => self.load(instruction),
         }
     }
 
-    /// return: page cross penalty
+    /// return: cycles taken
     #[inline]
     fn adc_sbc(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
@@ -201,7 +198,7 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result);
         self.flag_set_carry(result < operand_1 || (operand_2 == 0xFF && carry_val == 1));
         self.flag_set_overflow(operand_1, operand_2, result);
-        penalty
+        penalty + instruction.cycles()
     }
 
     #[inline]
@@ -228,7 +225,7 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result);
         self.flag_set_carry(result < operand_1 || operand_2 == 0xFF);
 
-        penalty
+        penalty + instruction.cycles()
     }
 
     #[inline]
@@ -254,7 +251,7 @@ impl<M: Memory> CPU<M> {
         self.flag_set_zero(result);
         self.flag_set_negative(result);
 
-        penalty
+        penalty + instruction.cycles()
     }
 
     #[inline]
@@ -271,7 +268,7 @@ impl<M: Memory> CPU<M> {
         self.sr &= 0b0011_1111;
         self.sr |= operand_2 & 0b1100_0000;
 
-        penalty
+        penalty + instruction.cycles()
     }
 
     #[inline]
@@ -291,7 +288,31 @@ impl<M: Memory> CPU<M> {
             _ => unreachable!(),
         };
 
-        self.write(instruction.mode(), operand)
+        self.write(instruction.mode(), operand) + instruction.cycles()
+    }
+
+    #[inline]
+    fn load(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::LDA | Mnemonic::LDX | Mnemonic::LDY
+            ),
+            "Invalid Instruction given to load: {instruction:?}"
+        );
+
+        let (byte, penalty) = self.fetch(instruction.mode());
+        match instruction.mnemonic() {
+            Mnemonic::LDA => self.a = byte,
+            Mnemonic::LDX => self.x = byte,
+            Mnemonic::LDY => self.y = byte,
+            _ => unreachable!(),
+        };
+
+        self.flag_set_negative(byte);
+        self.flag_set_zero(byte);
+
+        penalty + instruction.cycles()
     }
 
     fn flag_get_carry(&self) -> bool {
