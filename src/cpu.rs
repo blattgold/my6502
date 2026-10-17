@@ -1,10 +1,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    instruction::{
-        self, AddressingMode, Instruction,
-        Mnemonic::{self, TXA, TYA},
-    },
+    instruction::{AddressingMode, Instruction, Mnemonic},
     memory::Memory,
 };
 
@@ -198,6 +195,9 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::TXA
             | Mnemonic::TXS
             | Mnemonic::TYA => self.transfer(instruction),
+            Mnemonic::ASL | Mnemonic::LSR | Mnemonic::ROL | Mnemonic::ROR => {
+                self.shift_rotate(instruction)
+            }
         }
     }
 
@@ -380,6 +380,60 @@ impl<M: Memory> CPU<M> {
             Mnemonic::TAY => self.y = byte,
             Mnemonic::TXA | Mnemonic::TYA => self.a = byte,
             Mnemonic::TXS => self.sp = byte,
+            _ => unreachable!(),
+        }
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn shift_rotate(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::ASL | Mnemonic::LSR | Mnemonic::ROL | Mnemonic::ROR
+            ),
+            "Invalid Instruction given to shift_rotate: {instruction:?}"
+        );
+
+        let operand = match instruction.mode() {
+            AddressingMode::Implied => self.a,
+            AddressingMode::ZeroPage
+            | AddressingMode::ZeroPageX
+            | AddressingMode::Absolute
+            | AddressingMode::AbsoluteX => self.fetch(instruction.mode()).0,
+            _ => unreachable!(),
+        };
+
+        let (carry, result) = match instruction.mnemonic() {
+            Mnemonic::ASL => (operand & 0b1000_0000 != 0, operand << 1),
+            Mnemonic::LSR => (operand & 0b0000_0001 != 0, operand >> 1),
+            Mnemonic::ROL => (
+                operand & 0b1000_0000 != 0,
+                (operand << 1) | if self.flag_get_carry() { 1 } else { 0 },
+            ),
+            Mnemonic::ROR => (
+                operand & 0b0000_0001 != 0,
+                (operand >> 1)
+                    | if self.flag_get_carry() {
+                        0b1000_0000
+                    } else {
+                        0
+                    },
+            ),
+            _ => unreachable!(),
+        };
+
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.flag_set_carry(carry);
+
+        match instruction.mode() {
+            AddressingMode::Implied => self.a = result,
+            AddressingMode::ZeroPage
+            | AddressingMode::ZeroPageX
+            | AddressingMode::Absolute
+            | AddressingMode::AbsoluteX => _ = self.write(instruction.mode(), result),
             _ => unreachable!(),
         }
 

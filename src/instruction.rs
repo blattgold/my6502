@@ -44,6 +44,11 @@ pub enum Mnemonic {
     TXA,
     TXS,
     TYA,
+    // shift & rotate
+    ASL,
+    LSR,
+    ROL,
+    ROR,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -162,6 +167,30 @@ impl Instruction {
             0x8a => Some(Instruction(Mnemonic::TXA, AddressingMode::Implied)),
             0x9a => Some(Instruction(Mnemonic::TXS, AddressingMode::Implied)),
             0x98 => Some(Instruction(Mnemonic::TYA, AddressingMode::Implied)),
+            // ASL
+            0x0a => Some(Instruction(Mnemonic::ASL, AddressingMode::Implied)),
+            0x06 => Some(Instruction(Mnemonic::ASL, AddressingMode::ZeroPage)),
+            0x16 => Some(Instruction(Mnemonic::ASL, AddressingMode::ZeroPageX)),
+            0x0e => Some(Instruction(Mnemonic::ASL, AddressingMode::Absolute)),
+            0x1e => Some(Instruction(Mnemonic::ASL, AddressingMode::AbsoluteX)),
+            // LSR
+            0x4a => Some(Instruction(Mnemonic::LSR, AddressingMode::Implied)),
+            0x46 => Some(Instruction(Mnemonic::LSR, AddressingMode::ZeroPage)),
+            0x56 => Some(Instruction(Mnemonic::LSR, AddressingMode::ZeroPageX)),
+            0x4e => Some(Instruction(Mnemonic::LSR, AddressingMode::Absolute)),
+            0x5e => Some(Instruction(Mnemonic::LSR, AddressingMode::AbsoluteX)),
+            // ROL
+            0x2a => Some(Instruction(Mnemonic::ROL, AddressingMode::Implied)),
+            0x26 => Some(Instruction(Mnemonic::ROL, AddressingMode::ZeroPage)),
+            0x36 => Some(Instruction(Mnemonic::ROL, AddressingMode::ZeroPageX)),
+            0x2e => Some(Instruction(Mnemonic::ROL, AddressingMode::Absolute)),
+            0x3e => Some(Instruction(Mnemonic::ROL, AddressingMode::AbsoluteX)),
+            // ROR
+            0x6a => Some(Instruction(Mnemonic::ROR, AddressingMode::Implied)),
+            0x66 => Some(Instruction(Mnemonic::ROR, AddressingMode::ZeroPage)),
+            0x76 => Some(Instruction(Mnemonic::ROR, AddressingMode::ZeroPageX)),
+            0x6e => Some(Instruction(Mnemonic::ROR, AddressingMode::Absolute)),
+            0x7e => Some(Instruction(Mnemonic::ROR, AddressingMode::AbsoluteX)),
             _ => None,
         }
     }
@@ -169,6 +198,7 @@ impl Instruction {
     #[inline]
     pub fn cycles(self) -> usize {
         match self {
+            // most instructions share cycle counts
             Instruction(Mnemonic::ADC, addressing_mode)
             | Instruction(Mnemonic::SBC, addressing_mode)
             | Instruction(Mnemonic::CPX, addressing_mode)
@@ -199,6 +229,26 @@ impl Instruction {
                 | AddressingMode::AbsoluteY => 4,
                 AddressingMode::IndirectX => 6,
                 AddressingMode::IndirectY => 5,
+            },
+            // shifts and rotates
+            Instruction(Mnemonic::ASL, addressing_mode)
+            | Instruction(Mnemonic::LSR, addressing_mode)
+            | Instruction(Mnemonic::ROL, addressing_mode)
+            | Instruction(Mnemonic::ROR, addressing_mode) => match addressing_mode {
+                AddressingMode::Implied => 2,
+                AddressingMode::ZeroPage => 5,
+                AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,
+                AddressingMode::AbsoluteX => 7,
+                // these addressing modes should not be reachable
+                AddressingMode::ZeroPageY
+                | AddressingMode::AbsoluteY
+                | AddressingMode::IndirectY
+                | AddressingMode::Immediate
+                | AddressingMode::IndirectX => {
+                    panic!(
+                        "Shifts & Rotates should not have this addressing mode: {addressing_mode:?}"
+                    )
+                }
             },
         }
     }
