@@ -17,6 +17,8 @@ pub const FLAG_NEG: u8 = 0b1000_0000;
 pub const RESET_VECTOR_LO: u16 = 0xFFFC;
 pub const RESET_VECTOR_HI: u16 = 0xFFFD;
 
+pub const STACK_OFFSET: u16 = 256 * 1;
+
 pub struct CPU<M: Memory> {
     pub a: u8,
     pub x: u8,
@@ -101,6 +103,14 @@ impl<M: Memory> CPU<M> {
 
                 (addr_indexed, penalty)
             }
+            AddressingMode::Indirect => {
+                let addr_lo = self.memory.read_byte(self.pc);
+                let addr_hi = self
+                    .memory
+                    .read_byte((self.pc.wrapping_add(1) & 0x00ff) | (self.pc & 0xff00));
+
+                ((addr_hi as u16) << 8 | addr_lo as u16, 0)
+            }
             AddressingMode::Implied => unreachable!(),
         }
     }
@@ -121,9 +131,10 @@ impl<M: Memory> CPU<M> {
             | AddressingMode::ZeroPageY
             | AddressingMode::IndirectX
             | AddressingMode::IndirectY => self.pc = self.pc.wrapping_add(1),
-            AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
-                self.pc = self.pc.wrapping_add(2)
-            }
+            AddressingMode::Absolute
+            | AddressingMode::AbsoluteX
+            | AddressingMode::AbsoluteY
+            | AddressingMode::Indirect => self.pc = self.pc.wrapping_add(2),
             AddressingMode::Implied => unreachable!(),
         };
         (self.memory.read_byte(addr), penalty)
@@ -145,9 +156,10 @@ impl<M: Memory> CPU<M> {
             | AddressingMode::ZeroPageY
             | AddressingMode::IndirectX
             | AddressingMode::IndirectY => self.pc = self.pc.wrapping_add(1),
-            AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
-                self.pc = self.pc.wrapping_add(2)
-            }
+            AddressingMode::Absolute
+            | AddressingMode::AbsoluteX
+            | AddressingMode::AbsoluteY
+            | AddressingMode::Indirect => self.pc = self.pc.wrapping_add(2),
             AddressingMode::Implied => unreachable!(),
         };
         self.memory.write_byte(addr, byte);
@@ -161,7 +173,7 @@ impl<M: Memory> CPU<M> {
             | AddressingMode::Absolute
             | AddressingMode::IndirectX => 0,
             AddressingMode::AbsoluteY | AddressingMode::AbsoluteX | AddressingMode::IndirectY => 1,
-            AddressingMode::Implied => unreachable!(),
+            AddressingMode::Implied | AddressingMode::Indirect => unreachable!(),
         }
     }
 
@@ -206,6 +218,8 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::BPL
             | Mnemonic::BVC
             | Mnemonic::BVS => self.branch(instruction),
+            Mnemonic::JMP | Mnemonic::JSR => self.jump(instruction),
+            Mnemonic::RTS => self.rts(instruction),
         }
     }
 
@@ -498,6 +512,48 @@ impl<M: Memory> CPU<M> {
             _ = self.fetch(instruction.mode());
             instruction.cycles()
         }
+    }
+
+    #[inline]
+    fn jump(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::JMP | Mnemonic::JSR),
+            "Invalid Instruction given to jump: {instruction:?}"
+        );
+
+        if instruction.mnemonic() == Mnemonic::JSR {
+            let return_addr_hi = (self.pc.wrapping_add(1) & 0xff00 >> 8) as u8;
+            self.memory.write_byte(self.sp_addr(), return_addr_hi);
+            self.sp = self.sp.wrapping_add(255);
+
+            let return_addr_lo = self.pc.wrapping_add(1) as u8;
+            self.memory.write_byte(self.sp_addr(), return_addr_lo);
+            self.sp = self.sp.wrapping_add(255);
+        }
+
+        self.pc = self.resolve_address(instruction.mode()).0;
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn rts(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::RTS),
+            "Invalid Instruction given to rts: {instruction:?}"
+        );
+
+        self.sp = self.sp.wrapping_add(1);
+        let pc_lo = self.memory.read_byte(self.sp_addr());
+
+        self.sp = self.sp.wrapping_add(1);
+        let pc_hi = self.memory.read_byte(self.sp_addr());
+
+        self.pc = ((pc_hi as u16) << 8) | (pc_lo as u16).wrapping_add(1);
+        instruction.cycles()
+    }
+
+    fn sp_addr(&self) -> u16 {
+        (self.sp as u16).wrapping_add(STACK_OFFSET)
     }
 
     fn flag_get_carry(&self) -> bool {

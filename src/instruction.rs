@@ -12,6 +12,7 @@ pub enum AddressingMode {
     Absolute,
     AbsoluteX,
     AbsoluteY,
+    Indirect,
     IndirectX,
     IndirectY,
 }
@@ -60,6 +61,10 @@ pub enum Mnemonic {
     BCC,
     BPL,
     BVC,
+    // JUMP
+    JMP,
+    JSR,
+    RTS,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -211,6 +216,14 @@ impl Instruction {
             0x10 => Some(Instruction(Mnemonic::BPL, AddressingMode::Immediate)),
             0x70 => Some(Instruction(Mnemonic::BVS, AddressingMode::Immediate)),
             0x50 => Some(Instruction(Mnemonic::BVC, AddressingMode::Immediate)),
+            // JMP
+            0x4c => Some(Instruction(Mnemonic::JMP, AddressingMode::Absolute)),
+            0x6c => Some(Instruction(Mnemonic::JMP, AddressingMode::Indirect)),
+            // JSR
+            0x20 => Some(Instruction(Mnemonic::JSR, AddressingMode::Absolute)),
+            // RTS
+            0x60 => Some(Instruction(Mnemonic::RTS, AddressingMode::Implied)),
+
             _ => None,
         }
     }
@@ -257,6 +270,10 @@ impl Instruction {
                 | AddressingMode::AbsoluteY => 4,
                 AddressingMode::IndirectX => 6,
                 AddressingMode::IndirectY => 5,
+
+                _ => panic!(
+                    "Main Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
             },
             // shifts and rotates
             Instruction(Mnemonic::ASL, addressing_mode)
@@ -267,16 +284,37 @@ impl Instruction {
                 AddressingMode::ZeroPage => 5,
                 AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,
                 AddressingMode::AbsoluteX => 7,
-                // these addressing modes should not be reachable
-                AddressingMode::ZeroPageY
-                | AddressingMode::AbsoluteY
-                | AddressingMode::IndirectY
-                | AddressingMode::Immediate
-                | AddressingMode::IndirectX => {
+
+                _ => {
                     panic!(
                         "Shifts & Rotates should not have this addressing mode: {addressing_mode:?}"
                     )
                 }
+            },
+            // JMP
+            Instruction(Mnemonic::JMP, addressing_mode) => match addressing_mode {
+                AddressingMode::Absolute => 3,
+                AddressingMode::Indirect => 5,
+
+                _ => panic!(
+                    "JMP Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
+            },
+            // JSR
+            Instruction(Mnemonic::JSR, addressing_mode) => match addressing_mode {
+                AddressingMode::Absolute => 6,
+
+                _ => panic!(
+                    "JSR Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
+            },
+            // RTS
+            Instruction(Mnemonic::RTS, addressing_mode) => match addressing_mode {
+                AddressingMode::Implied => 6,
+
+                _ => panic!(
+                    "RTS Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
             },
         }
     }
