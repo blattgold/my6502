@@ -198,6 +198,14 @@ impl<M: Memory> CPU<M> {
             Mnemonic::ASL | Mnemonic::LSR | Mnemonic::ROL | Mnemonic::ROR => {
                 self.shift_rotate(instruction)
             }
+            Mnemonic::BEQ
+            | Mnemonic::BCS
+            | Mnemonic::BCC
+            | Mnemonic::BMI
+            | Mnemonic::BNE
+            | Mnemonic::BPL
+            | Mnemonic::BVC
+            | Mnemonic::BVS => self.branch(instruction),
         }
     }
 
@@ -440,8 +448,72 @@ impl<M: Memory> CPU<M> {
         instruction.cycles()
     }
 
+    #[inline]
+    fn branch(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::BEQ
+                    | Mnemonic::BCS
+                    | Mnemonic::BCC
+                    | Mnemonic::BNE
+                    | Mnemonic::BMI
+                    | Mnemonic::BPL
+                    | Mnemonic::BVS
+                    | Mnemonic::BVC
+            ),
+            "Invalid Instruction given to branch: {instruction:?}"
+        );
+
+        debug_assert!(
+            matches!(instruction.mode(), AddressingMode::Immediate),
+            "Branch must always be 'Immediate' Addressing Mode: {instruction:?}"
+        );
+
+        let branch_taken = match instruction.mnemonic() {
+            Mnemonic::BEQ => self.flag_get_zero(),
+            Mnemonic::BNE => !self.flag_get_zero(),
+            Mnemonic::BCS => self.flag_get_carry(),
+            Mnemonic::BCC => !self.flag_get_carry(),
+            Mnemonic::BMI => self.flag_get_negative(),
+            Mnemonic::BPL => !self.flag_get_negative(),
+            Mnemonic::BVS => self.flag_get_overflow(),
+            Mnemonic::BVC => !self.flag_get_overflow(),
+            _ => unreachable!(),
+        };
+
+        if branch_taken {
+            let offset = self.fetch(instruction.mode()).0 as i8 as i16 as u16;
+            let pc_target = self.pc.wrapping_add(offset);
+
+            let cycles = if pc_target & 0xff00 == self.pc & 0xff00 {
+                instruction.cycles() + 1
+            } else {
+                instruction.cycles() + 2
+            };
+
+            self.pc = pc_target;
+            cycles
+        } else {
+            _ = self.fetch(instruction.mode());
+            instruction.cycles()
+        }
+    }
+
     fn flag_get_carry(&self) -> bool {
         (self.sr & FLAG_CRY) != 0
+    }
+
+    fn flag_get_zero(&self) -> bool {
+        (self.sr & FLAG_ZRO) != 0
+    }
+
+    fn flag_get_negative(&self) -> bool {
+        (self.sr & FLAG_NEG) != 0
+    }
+
+    fn flag_get_overflow(&self) -> bool {
+        (self.sr & FLAG_OVF) != 0
     }
 
     fn flag_set_zero(&mut self, result: u8) {

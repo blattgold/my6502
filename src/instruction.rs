@@ -2,7 +2,9 @@ use crate::instruction::AddressingMode::IndirectX;
 
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
+    /// Implied and Accumulator
     Implied,
+    /// Immediate and Relative
     Immediate,
     ZeroPage,
     ZeroPageX,
@@ -49,6 +51,15 @@ pub enum Mnemonic {
     LSR,
     ROL,
     ROR,
+    // branch
+    BEQ,
+    BMI,
+    BCS,
+    BVS,
+    BNE,
+    BCC,
+    BPL,
+    BVC,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -191,6 +202,15 @@ impl Instruction {
             0x76 => Some(Instruction(Mnemonic::ROR, AddressingMode::ZeroPageX)),
             0x6e => Some(Instruction(Mnemonic::ROR, AddressingMode::Absolute)),
             0x7e => Some(Instruction(Mnemonic::ROR, AddressingMode::AbsoluteX)),
+            // BRANCHING
+            0xf0 => Some(Instruction(Mnemonic::BEQ, AddressingMode::Immediate)),
+            0xd0 => Some(Instruction(Mnemonic::BNE, AddressingMode::Immediate)),
+            0xb0 => Some(Instruction(Mnemonic::BCS, AddressingMode::Immediate)),
+            0x90 => Some(Instruction(Mnemonic::BCC, AddressingMode::Immediate)),
+            0x30 => Some(Instruction(Mnemonic::BMI, AddressingMode::Immediate)),
+            0x10 => Some(Instruction(Mnemonic::BPL, AddressingMode::Immediate)),
+            0x70 => Some(Instruction(Mnemonic::BVS, AddressingMode::Immediate)),
+            0x50 => Some(Instruction(Mnemonic::BVC, AddressingMode::Immediate)),
             _ => None,
         }
     }
@@ -219,7 +239,15 @@ impl Instruction {
             | Instruction(Mnemonic::TSX, addressing_mode)
             | Instruction(Mnemonic::TXA, addressing_mode)
             | Instruction(Mnemonic::TXS, addressing_mode)
-            | Instruction(Mnemonic::TYA, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::TYA, addressing_mode)
+            | Instruction(Mnemonic::BEQ, addressing_mode)
+            | Instruction(Mnemonic::BMI, addressing_mode)
+            | Instruction(Mnemonic::BCS, addressing_mode)
+            | Instruction(Mnemonic::BVS, addressing_mode)
+            | Instruction(Mnemonic::BNE, addressing_mode)
+            | Instruction(Mnemonic::BCC, addressing_mode)
+            | Instruction(Mnemonic::BPL, addressing_mode)
+            | Instruction(Mnemonic::BVC, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
