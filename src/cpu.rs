@@ -580,7 +580,7 @@ impl<M: Memory> CPU<M> {
         self.sp = self.sp.wrapping_add(1);
         let pc_hi = self.memory.read_byte(self.sp_addr());
 
-        self.pc = ((pc_hi as u16) << 8) | (pc_lo as u16).wrapping_add(1);
+        self.pc = (((pc_hi as u16) << 8) | (pc_lo as u16)).wrapping_add(1);
         instruction.cycles()
     }
 
