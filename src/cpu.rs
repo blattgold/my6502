@@ -247,7 +247,8 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::BPL
             | Mnemonic::BVC
             | Mnemonic::BVS => self.branch(instruction),
-            Mnemonic::JMP | Mnemonic::JSR => self.jump(instruction),
+            Mnemonic::JMP => self.jmp(instruction),
+            Mnemonic::JSR => self.jsr(instruction),
             Mnemonic::RTS => self.rts(instruction),
             Mnemonic::NOP => self.nop(instruction),
         }
@@ -547,23 +548,39 @@ impl<M: Memory> CPU<M> {
     }
 
     #[inline]
-    fn jump(&mut self, instruction: Instruction) -> usize {
+    fn jmp(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::JMP | Mnemonic::JSR),
-            "Invalid Instruction given to jump: {instruction:?}"
+            matches!(instruction.mnemonic(), Mnemonic::JMP),
+            "Invalid Instruction given to jmp: {instruction:?}"
         );
 
-        if instruction.mnemonic() == Mnemonic::JSR {
-            let return_addr_hi = (self.pc.wrapping_add(1) & 0xff00 >> 8) as u8;
-            self.memory.write_byte(self.sp_addr(), return_addr_hi);
-            self.sp = self.sp.wrapping_add(255);
-
-            let return_addr_lo = self.pc.wrapping_add(1) as u8;
-            self.memory.write_byte(self.sp_addr(), return_addr_lo);
-            self.sp = self.sp.wrapping_add(255);
-        }
-
         self.pc = self.resolve_address(instruction.mode()).0;
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn jsr(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::JSR),
+            "Invalid Instruction given to jsr: {instruction:?}"
+        );
+
+        let target_lo = self.memory.read_byte(self.pc) as u16;
+        self.pc = self.pc.wrapping_add(1);
+
+        let return_addr = self.pc;
+
+        let return_addr_hi = (return_addr >> 8) as u8;
+        self.memory.write_byte(self.sp_addr(), return_addr_hi);
+        self.sp = self.sp.wrapping_add(255);
+
+        let return_addr_lo = return_addr as u8;
+        self.memory.write_byte(self.sp_addr(), return_addr_lo);
+        self.sp = self.sp.wrapping_add(255);
+
+        let target_hi = self.memory.read_byte(self.pc) as u16;
+        self.pc = (target_hi << 8) | target_lo;
+
         instruction.cycles()
     }
 
