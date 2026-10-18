@@ -1,3 +1,8 @@
+/// ---
+/// Implied mode is also used for Accumulator mode
+/// ---
+/// Immediate mode is also used for Relative mode
+/// ---
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
     /// Implied and Accumulator
@@ -65,6 +70,10 @@ pub enum Mnemonic {
     RTS,
     // NOP
     NOP,
+    // Increment
+    INC,
+    INX,
+    INY,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -225,6 +234,13 @@ impl Instruction {
             0x60 => Some(Instruction(Mnemonic::RTS, AddressingMode::Implied)),
             // NOP
             0xea => Some(Instruction(Mnemonic::NOP, AddressingMode::Implied)),
+            // INCREMENT
+            0xe6 => Some(Instruction(Mnemonic::INC, AddressingMode::ZeroPage)),
+            0xf6 => Some(Instruction(Mnemonic::INC, AddressingMode::ZeroPageX)),
+            0xee => Some(Instruction(Mnemonic::INC, AddressingMode::Absolute)),
+            0xfe => Some(Instruction(Mnemonic::INC, AddressingMode::AbsoluteX)),
+            0xe8 => Some(Instruction(Mnemonic::INX, AddressingMode::Implied)),
+            0xc8 => Some(Instruction(Mnemonic::INY, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -232,7 +248,7 @@ impl Instruction {
     #[inline]
     pub fn cycles(self) -> usize {
         match self {
-            // most instructions share cycle counts
+            // read
             Instruction(Mnemonic::ADC, addressing_mode)
             | Instruction(Mnemonic::SBC, addressing_mode)
             | Instruction(Mnemonic::CPX, addressing_mode)
@@ -277,11 +293,14 @@ impl Instruction {
                     "Main Cycle Group should not have this addressing mode: {addressing_mode:?}"
                 ),
             },
-            // shifts and rotates
+            // write | read & write
             Instruction(Mnemonic::ASL, addressing_mode)
             | Instruction(Mnemonic::LSR, addressing_mode)
             | Instruction(Mnemonic::ROL, addressing_mode)
-            | Instruction(Mnemonic::ROR, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::ROR, addressing_mode)
+            | Instruction(Mnemonic::INC, addressing_mode)
+            | Instruction(Mnemonic::INX, addressing_mode)
+            | Instruction(Mnemonic::INY, addressing_mode) => match addressing_mode {
                 AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 5,
                 AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,

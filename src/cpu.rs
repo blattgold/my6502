@@ -251,6 +251,9 @@ impl<M: Memory> CPU<M> {
             Mnemonic::JSR => self.jsr(instruction),
             Mnemonic::RTS => self.rts(instruction),
             Mnemonic::NOP => self.nop(instruction),
+            Mnemonic::INC => self.inc(instruction),
+            Mnemonic::INX => self.inx(instruction),
+            Mnemonic::INY => self.iny(instruction),
         }
     }
 
@@ -606,6 +609,62 @@ impl<M: Memory> CPU<M> {
         2
     }
 
+    #[inline]
+    fn inc(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::INC),
+            "Invalid Instruction given to inc: {instruction:?}"
+        );
+
+        let addr = self.resolve_address(instruction.mode()).0;
+        let result = self.memory.read_byte(addr).wrapping_add(1);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.write(instruction.mode(), result);
+
+        instruction.cycles()
+    }
+
+    fn inx(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::INX),
+            "Invalid Instruction given to inx: {instruction:?}"
+        );
+
+        debug_assert!(
+            matches!(instruction.mode(), AddressingMode::Implied),
+            "Invalid Mode for INX: {:?}",
+            instruction.mode()
+        );
+
+        let result = self.x.wrapping_add(1);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.x = result;
+
+        instruction.cycles()
+    }
+
+    fn iny(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::INY),
+            "Invalid Instruction given to iny: {instruction:?}"
+        );
+
+        debug_assert!(
+            matches!(instruction.mode(), AddressingMode::Implied),
+            "Invalid Mode for INY: {:?}",
+            instruction.mode()
+        );
+
+        let result = self.y.wrapping_add(1);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.y = result;
+
+        instruction.cycles()
+    }
+
     fn sp_addr(&self) -> u16 {
         (self.sp as u16).wrapping_add(STACK_OFFSET)
     }
@@ -650,6 +709,7 @@ impl<M: Memory> CPU<M> {
         }
     }
 
+    /// helper for signed arithmetic
     fn flag_set_overflow(&mut self, a: u8, b: u8, result: u8) {
         if (a ^ result) & (b ^ result) & 0x80 != 0 {
             self.sr |= FLAG_OVF
