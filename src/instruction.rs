@@ -1,5 +1,3 @@
-use crate::instruction::AddressingMode::IndirectX;
-
 #[derive(Clone, Copy, Debug)]
 pub enum AddressingMode {
     /// Implied and Accumulator
@@ -223,7 +221,6 @@ impl Instruction {
             0x20 => Some(Instruction(Mnemonic::JSR, AddressingMode::Absolute)),
             // RTS
             0x60 => Some(Instruction(Mnemonic::RTS, AddressingMode::Implied)),
-
             _ => None,
         }
     }

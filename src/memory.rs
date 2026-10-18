@@ -4,7 +4,7 @@ pub trait Memory: Default {
 
     fn read_word(&self, addr: u16) -> u16 {
         let lo = self.read_byte(addr) as u16;
-        let hi = self.read_byte(addr + 1) as u16;
+        let hi = self.read_byte(addr.wrapping_add(1)) as u16;
         (hi << 8) | lo
     }
 
@@ -12,6 +12,8 @@ pub trait Memory: Default {
         self.write_byte(addr, word as u8);
         self.write_byte(addr, (word >> 8) as u8);
     }
+
+    fn clear(&mut self);
 }
 
 pub struct Bus {
@@ -46,5 +48,10 @@ impl Memory for Bus {
             0..0x8000 => self.ram[(addr & 0x3FF) as usize] = byte,
             _ => eprintln!("attempted to write '{byte}' to ROM at address: {addr}!"),
         };
+    }
+
+    fn clear(&mut self) {
+        self.ram = [0; 1024];
+        self.rom = [0; 4096];
     }
 }

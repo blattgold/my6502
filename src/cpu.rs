@@ -19,6 +19,11 @@ pub const RESET_VECTOR_HI: u16 = 0xFFFD;
 
 pub const STACK_OFFSET: u16 = 256 * 1;
 
+pub enum CPUState {
+    Reset,
+    Running,
+}
+
 pub struct CPU<M: Memory> {
     pub a: u8,
     pub x: u8,
@@ -27,11 +32,13 @@ pub struct CPU<M: Memory> {
     pub sr: u8,
     pub pc: u16,
 
-    memory: M,
+    pub state: CPUState,
+    pub cycles: usize,
+    pub memory: M,
 }
 
 impl<M: Memory> CPU<M> {
-    pub fn new(memory: M) -> Self {
+    pub fn new(memory: M, skip_reset: bool) -> Self {
         Self {
             a: 0,
             x: 0,
@@ -40,6 +47,12 @@ impl<M: Memory> CPU<M> {
             sr: 0,
             pc: 0,
 
+            state: if skip_reset {
+                CPUState::Running
+            } else {
+                CPUState::Reset
+            },
+            cycles: 0,
             memory,
         }
     }
@@ -90,10 +103,10 @@ impl<M: Memory> CPU<M> {
             }
             AddressingMode::IndirectY => {
                 let zp_addr_lo = self.memory.read_byte(self.pc);
-                let zp_addr_hi = self.memory.read_byte(self.pc.wrapping_add(1));
+                let zp_addr_hi = zp_addr_lo.wrapping_add(1);
                 let addr_lo = self.memory.read_byte(zp_addr_lo as u16);
                 let addr_hi = self.memory.read_byte(zp_addr_hi as u16);
-                let addr = (addr_hi as u16) << 8 | addr_lo as u16;
+                let addr = ((addr_hi as u16) << 8) | (addr_lo as u16);
                 let addr_indexed = addr.wrapping_add(self.y as u16);
                 let penalty = if addr & 0xFF00 != addr_indexed & 0xFF00 {
                     1
@@ -149,6 +162,7 @@ impl<M: Memory> CPU<M> {
         );
 
         let (addr, _) = self.resolve_address(addressing_mode);
+        println!("ADDR: {addr}");
         match addressing_mode {
             AddressingMode::Immediate
             | AddressingMode::ZeroPage
@@ -179,16 +193,32 @@ impl<M: Memory> CPU<M> {
 
     pub fn step(&mut self) -> Result<()> {
         let opcode = self.memory.read_byte(self.pc);
-        println!("{opcode}");
         self.pc = self.pc.wrapping_add(1);
 
-        if let Some(instruction) = Instruction::from_opcode(opcode) {
-            println!("Executing: {instruction:?}...");
-            self.exec(instruction);
-            Ok(())
-        } else {
-            Err(anyhow!("Invalid or unimplemented opcode: {opcode}"))
+        match self.state {
+            CPUState::Reset => {
+                self.sp = self.sp.wrapping_add(253);
+                self.sr |= FLAG_INT;
+                self.pc = self.memory.read_word(RESET_VECTOR_LO);
+
+                self.cycles = 6;
+                self.state = CPUState::Running;
+                Ok(())
+            }
+            CPUState::Running => {
+                if let Some(instruction) = Instruction::from_opcode(opcode) {
+                    self.cycles += self.exec(instruction);
+                    Ok(())
+                } else {
+                    Err(anyhow!("Invalid or unimplemented opcode: {opcode}"))
+                }
+            }
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.cycles = 0;
+        self.state = CPUState::Reset;
     }
 
     /// return: cycles this instruction took
@@ -236,17 +266,18 @@ impl<M: Memory> CPU<M> {
         let (operand_2, penalty) = self.fetch(instruction.mode());
         let operand_2 = match instruction.mnemonic() {
             Mnemonic::ADC => operand_2,
-            Mnemonic::SBC => (!operand_2).wrapping_add(1),
+            Mnemonic::SBC => !operand_2,
             _ => unreachable!(),
         };
 
-        let carry_val = if self.flag_get_carry() { 1 } else { 0 };
-        let result = operand_1.wrapping_add(operand_2).wrapping_add(carry_val);
+        let operand_2_carry = operand_2.wrapping_add(if self.flag_get_carry() { 1 } else { 0 });
+
+        let result = operand_1.wrapping_add(operand_2_carry);
         self.a = result;
 
         self.flag_set_zero(result);
         self.flag_set_negative(result);
-        self.flag_set_carry(result < operand_1 || (operand_2 == 0xFF && carry_val == 1));
+        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
         self.flag_set_overflow(operand_1, operand_2, result);
         penalty + instruction.cycles()
     }
@@ -267,13 +298,14 @@ impl<M: Memory> CPU<M> {
             _ => unreachable!(),
         };
         let (operand_2, penalty) = self.fetch(instruction.mode());
-        let operand_2 = (!operand_2).wrapping_add(1);
+        let operand_2 = !operand_2;
 
-        let result = operand_1.wrapping_add(operand_2).wrapping_add(1);
+        let operand_2_carry = operand_2.wrapping_add(1);
+        let result = operand_1.wrapping_add(operand_2_carry);
 
         self.flag_set_zero(result);
         self.flag_set_negative(result);
-        self.flag_set_carry(result < operand_1 || operand_2 == 0xFF);
+        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
 
         penalty + instruction.cycles()
     }
