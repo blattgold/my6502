@@ -162,7 +162,6 @@ impl<M: Memory> CPU<M> {
         );
 
         let (addr, _) = self.resolve_address(addressing_mode);
-        println!("ADDR: {addr}");
         match addressing_mode {
             AddressingMode::Immediate
             | AddressingMode::ZeroPage
@@ -250,6 +249,7 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::BVS => self.branch(instruction),
             Mnemonic::JMP | Mnemonic::JSR => self.jump(instruction),
             Mnemonic::RTS => self.rts(instruction),
+            Mnemonic::NOP => self.nop(instruction),
         }
     }
 
@@ -582,6 +582,11 @@ impl<M: Memory> CPU<M> {
 
         self.pc = ((pc_hi as u16) << 8) | (pc_lo as u16).wrapping_add(1);
         instruction.cycles()
+    }
+
+    #[inline]
+    fn nop(&mut self, _instruction: Instruction) -> usize {
+        2
     }
 
     fn sp_addr(&self) -> u16 {

@@ -63,6 +63,8 @@ pub enum Mnemonic {
     JMP,
     JSR,
     RTS,
+    // NOP
+    NOP,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -221,6 +223,8 @@ impl Instruction {
             0x20 => Some(Instruction(Mnemonic::JSR, AddressingMode::Absolute)),
             // RTS
             0x60 => Some(Instruction(Mnemonic::RTS, AddressingMode::Implied)),
+            // NOP
+            0xea => Some(Instruction(Mnemonic::NOP, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -257,7 +261,8 @@ impl Instruction {
             | Instruction(Mnemonic::BNE, addressing_mode)
             | Instruction(Mnemonic::BCC, addressing_mode)
             | Instruction(Mnemonic::BPL, addressing_mode)
-            | Instruction(Mnemonic::BVC, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::BVC, addressing_mode)
+            | Instruction(Mnemonic::NOP, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
