@@ -459,7 +459,10 @@ impl<M: Memory> CPU<M> {
             AddressingMode::ZeroPage
             | AddressingMode::ZeroPageX
             | AddressingMode::Absolute
-            | AddressingMode::AbsoluteX => self.fetch(instruction.mode()).0,
+            | AddressingMode::AbsoluteX => {
+                let addr = self.resolve_address(instruction.mode()).0;
+                self.memory.read_byte(addr)
+            }
             _ => unreachable!(),
         };
 
