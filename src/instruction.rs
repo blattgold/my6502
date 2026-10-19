@@ -108,6 +108,8 @@ pub enum Mnemonic {
     JAMB2,
     JAMD2,
     JAMF2,
+    // USBC
+    USBC,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -314,6 +316,8 @@ impl Instruction {
             0xb2 => Some(Instruction(Mnemonic::JAMB2, AddressingMode::Implied)),
             0xd2 => Some(Instruction(Mnemonic::JAMD2, AddressingMode::Implied)),
             0xf2 => Some(Instruction(Mnemonic::JAMF2, AddressingMode::Implied)),
+            // USBC
+            0xeb => Some(Instruction(Mnemonic::USBC, AddressingMode::Immediate)),
             _ => None,
         }
     }
@@ -358,7 +362,8 @@ impl Instruction {
             | Instruction(Mnemonic::CLV, addressing_mode)
             | Instruction(Mnemonic::SEC, addressing_mode)
             | Instruction(Mnemonic::SED, addressing_mode)
-            | Instruction(Mnemonic::SEI, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::SEI, addressing_mode)
+            | Instruction(Mnemonic::USBC, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX

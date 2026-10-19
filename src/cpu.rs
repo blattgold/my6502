@@ -22,12 +22,14 @@ pub const IRQ_VECTOR_HI: u16 = 0xffff;
 
 pub const STACK_OFFSET: u16 = 256 * 1;
 
+/// the state is set to JAM if one of the JAM opcodes is run.
 pub enum CPUState {
     Reset,
     Running,
     Jam,
 }
 
+/// reproduces all quirks of the original NMOS 6502
 pub struct CPU<M: Memory> {
     pub a: u8,
     pub x: u8,
@@ -234,7 +236,7 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
         match instruction.mnemonic() {
-            Mnemonic::ADC | Mnemonic::SBC => self.arithmetic(instruction),
+            Mnemonic::ADC | Mnemonic::SBC | Mnemonic::USBC => self.arithmetic(instruction),
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
@@ -301,7 +303,10 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn arithmetic(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::ADC | Mnemonic::SBC),
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::ADC | Mnemonic::SBC | Mnemonic::USBC
+            ),
             "Invalid Instruction given to adc: {instruction:?}",
         );
 
@@ -318,7 +323,7 @@ impl<M: Memory> CPU<M> {
 
     #[inline]
     fn arithmetic_binary(&mut self, instruction: Instruction) -> usize {
-        let subtract = instruction.mnemonic() == Mnemonic::SBC;
+        let subtract = matches!(instruction.mnemonic(), Mnemonic::SBC | Mnemonic::USBC);
 
         let a = self.a;
         let (b, penalty) = self.fetch(instruction.mode());
