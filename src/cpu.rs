@@ -29,7 +29,7 @@ pub enum CPUState {
     Jam,
 }
 
-/// reproduces all quirks of the original NMOS 6502
+/// reproduces (almost) all quirks of the original NMOS 6502
 pub struct CPU<M: Memory> {
     pub a: u8,
     pub x: u8,
@@ -236,7 +236,7 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
         match instruction.mnemonic() {
-            Mnemonic::ADC | Mnemonic::SBC | Mnemonic::USBC => self.arithmetic(instruction),
+            Mnemonic::ADC | Mnemonic::SBC => self.arithmetic(instruction),
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
@@ -281,8 +281,11 @@ impl<M: Memory> CPU<M> {
             Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
 
+            // -- undocumented --
+            Mnemonic::USBC => self.arithmetic(instruction),
             Mnemonic::ALR => self.alr(instruction),
             Mnemonic::ANC | Mnemonic::ANC2 => self.anc(instruction),
+            Mnemonic::ARR => self.arr(instruction),
 
             Mnemonic::JAM02
             | Mnemonic::JAM12
@@ -1031,6 +1034,39 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result_and);
         self.flag_set_zero(result_and);
         self.flag_set_carry(carry_out);
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn arr(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::ARR),
+            "Invalid Instruction given to arr: {instruction:?}"
+        );
+
+        let operand_1 = self.a;
+        let operand_2 = self.fetch(instruction.mode()).0;
+
+        let result_and = operand_1 & operand_2;
+        let result_ror = (result_and >> 1)
+            | if self.flag_get_carry() {
+                0b1000_0000
+            } else {
+                0
+            };
+
+        self.flag_set_negative(result_ror);
+        self.flag_set_zero(result_ror);
+        self.flag_set_carry((result_ror & 0x40) != 0);
+
+        if (((result_ror >> 6) ^ (result_ror >> 5)) & 1) != 0 {
+            self.sr |= FLAG_OVF;
+        } else {
+            self.sr &= !FLAG_OVF;
+        }
+
+        self.a = result_ror;
 
         instruction.cycles()
     }
