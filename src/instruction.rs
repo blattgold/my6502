@@ -89,6 +89,9 @@ pub enum Mnemonic {
     // INTERRUPT
     BRK,
     RTI,
+    // STACK PUSH
+    PHA,
+    PHP,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -275,6 +278,9 @@ impl Instruction {
             // INTERRUPT
             0x00 => Some(Instruction(Mnemonic::BRK, AddressingMode::Implied)),
             0x40 => Some(Instruction(Mnemonic::RTI, AddressingMode::Implied)),
+            // STACK PUSH
+            0x48 => Some(Instruction(Mnemonic::PHA, AddressingMode::Implied)),
+            0x08 => Some(Instruction(Mnemonic::PHP, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -388,6 +394,15 @@ impl Instruction {
 
                 _ => panic!(
                     "BRK Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
+            },
+            // PHA & PHP
+            Instruction(Mnemonic::PHA, addressing_mode)
+            | Instruction(Mnemonic::PHP, addressing_mode) => match addressing_mode {
+                AddressingMode::Implied => 3,
+
+                _ => panic!(
+                    "PHA & PHP Cycle Group should not have this addressing mode: {addressing_mode:?}"
                 ),
             },
         }

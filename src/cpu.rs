@@ -274,6 +274,7 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::SEI => self.flag(instruction),
             Mnemonic::BRK => self.brk(instruction),
             Mnemonic::RTI => self.rti(instruction),
+            Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
         }
     }
 
@@ -888,6 +889,11 @@ impl<M: Memory> CPU<M> {
 
     #[inline]
     fn brk(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::BRK),
+            "Invalid Instruction given to brk: {instruction:?}"
+        );
+
         let return_lo = self.pc.wrapping_add(1) as u8;
         let return_hi = ((self.pc.wrapping_add(1) & 0xff00) >> 8) as u8;
 
@@ -906,12 +912,33 @@ impl<M: Memory> CPU<M> {
 
     #[inline]
     fn rti(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::RTI),
+            "Invalid Instruction given to rti: {instruction:?}"
+        );
+
         let sr = self.pop_stack();
         let return_lo = self.pop_stack();
         let return_hi = self.pop_stack();
 
         self.sr = (sr & !FLAG_BRK) | FLAG_IGN;
         self.pc = ((return_hi as u16) << 8) | (return_lo as u16);
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn push_op(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::PHA | Mnemonic::PHP),
+            "Invalid Instruction given to stack_push: {instruction:?}"
+        );
+
+        match instruction.mnemonic() {
+            Mnemonic::PHA => self.push_stack(self.a),
+            Mnemonic::PHP => self.push_stack(self.sr | FLAG_BRK | FLAG_IGN),
+            _ => unreachable!(),
+        }
 
         instruction.cycles()
     }
