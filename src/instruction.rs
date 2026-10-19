@@ -117,6 +117,8 @@ pub enum Mnemonic {
     ANC2,
     // ARR
     ARR,
+    // DCP
+    DCP,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -332,6 +334,14 @@ impl Instruction {
             0x2b => Some(Instruction(Mnemonic::ANC2, AddressingMode::Immediate)),
             // ARR
             0x6b => Some(Instruction(Mnemonic::ARR, AddressingMode::Immediate)),
+            // DCP
+            0xc7 => Some(Instruction(Mnemonic::DCP, AddressingMode::ZeroPage)),
+            0xd7 => Some(Instruction(Mnemonic::DCP, AddressingMode::ZeroPageX)),
+            0xcf => Some(Instruction(Mnemonic::DCP, AddressingMode::Absolute)),
+            0xdf => Some(Instruction(Mnemonic::DCP, AddressingMode::AbsoluteX)),
+            0xdb => Some(Instruction(Mnemonic::DCP, AddressingMode::AbsoluteY)),
+            0xc3 => Some(Instruction(Mnemonic::DCP, AddressingMode::IndirectX)),
+            0xd3 => Some(Instruction(Mnemonic::DCP, AddressingMode::IndirectY)),
             _ => None,
         }
     }
@@ -400,24 +410,29 @@ impl Instruction {
                 ),
             },
             // write | read & write
-            Instruction(Mnemonic::ASL, addressing_mode)
-            | Instruction(Mnemonic::LSR, addressing_mode)
-            | Instruction(Mnemonic::ROL, addressing_mode)
-            | Instruction(Mnemonic::ROR, addressing_mode)
-            | Instruction(Mnemonic::INC, addressing_mode)
-            | Instruction(Mnemonic::INX, addressing_mode)
-            | Instruction(Mnemonic::INY, addressing_mode)
-            | Instruction(Mnemonic::DEC, addressing_mode)
-            | Instruction(Mnemonic::DEX, addressing_mode)
-            | Instruction(Mnemonic::DEY, addressing_mode) => match addressing_mode {
+            Instruction(
+                Mnemonic::ASL
+                | Mnemonic::LSR
+                | Mnemonic::ROL
+                | Mnemonic::ROR
+                | Mnemonic::INC
+                | Mnemonic::INX
+                | Mnemonic::INY
+                | Mnemonic::DEC
+                | Mnemonic::DEX
+                | Mnemonic::DEY
+                | Mnemonic::DCP,
+                addressing_mode,
+            ) => match addressing_mode {
                 AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 5,
                 AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,
-                AddressingMode::AbsoluteX => 7,
+                AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => 7,
+                AddressingMode::IndirectX | AddressingMode::IndirectY => 8,
 
                 _ => {
                     panic!(
-                        "Shifts & Rotates should not have this addressing mode: {addressing_mode:?}"
+                        "write | read & write Group should not have this addressing mode: {addressing_mode:?}"
                     )
                 }
             },

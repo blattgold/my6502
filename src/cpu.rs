@@ -286,6 +286,7 @@ impl<M: Memory> CPU<M> {
             Mnemonic::ALR => self.alr(instruction),
             Mnemonic::ANC | Mnemonic::ANC2 => self.anc(instruction),
             Mnemonic::ARR => self.arr(instruction),
+            Mnemonic::DCP => self.dcp(instruction),
 
             Mnemonic::JAM02
             | Mnemonic::JAM12
@@ -1067,6 +1068,34 @@ impl<M: Memory> CPU<M> {
         }
 
         self.a = result_ror;
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn dcp(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::DCP),
+            "Invalid Instruction given to dcp: {instruction:?}"
+        );
+
+        let byte = {
+            let addr = self.resolve_address(instruction.mode()).0;
+            self.memory.read_byte(addr)
+        };
+
+        let result_dec = byte.wrapping_add(255);
+        self.write(instruction.mode(), result_dec);
+
+        let operand_1 = self.a;
+        let operand_2 = !result_dec;
+        let operand_2_carry = operand_2.wrapping_add(1);
+
+        let result = operand_1.wrapping_add(operand_2_carry);
+
+        self.flag_set_zero(result);
+        self.flag_set_negative(result);
+        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
 
         instruction.cycles()
     }
