@@ -254,6 +254,16 @@ impl<M: Memory> CPU<M> {
             Mnemonic::INC => self.inc(instruction),
             Mnemonic::INX => self.inx(instruction),
             Mnemonic::INY => self.iny(instruction),
+            Mnemonic::DEC => self.dec(instruction),
+            Mnemonic::DEX => self.dex(instruction),
+            Mnemonic::DEY => self.dey(instruction),
+            Mnemonic::CLC
+            | Mnemonic::CLD
+            | Mnemonic::CLI
+            | Mnemonic::CLV
+            | Mnemonic::SEC
+            | Mnemonic::SED
+            | Mnemonic::SEI => self.flag(instruction),
         }
     }
 
@@ -736,6 +746,7 @@ impl<M: Memory> CPU<M> {
         instruction.cycles()
     }
 
+    #[inline]
     fn inx(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
             matches!(instruction.mnemonic(), Mnemonic::INX),
@@ -756,6 +767,7 @@ impl<M: Memory> CPU<M> {
         instruction.cycles()
     }
 
+    #[inline]
     fn iny(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
             matches!(instruction.mnemonic(), Mnemonic::INY),
@@ -772,6 +784,94 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result);
         self.flag_set_zero(result);
         self.y = result;
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn dec(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::DEC),
+            "Invalid Instruction given to dec: {instruction:?}"
+        );
+
+        let addr = self.resolve_address(instruction.mode()).0;
+        let result = self.memory.read_byte(addr).wrapping_add(255);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.write(instruction.mode(), result);
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn dex(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::DEX),
+            "Invalid Instruction given to dex: {instruction:?}"
+        );
+
+        debug_assert!(
+            matches!(instruction.mode(), AddressingMode::Implied),
+            "Invalid Mode for DEX: {:?}",
+            instruction.mode()
+        );
+
+        let result = self.x.wrapping_add(255);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.x = result;
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn dey(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::DEY),
+            "Invalid Instruction given to dey: {instruction:?}"
+        );
+
+        debug_assert!(
+            matches!(instruction.mode(), AddressingMode::Implied),
+            "Invalid Mode for DEY: {:?}",
+            instruction.mode()
+        );
+
+        let result = self.y.wrapping_add(255);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.y = result;
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn flag(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(
+                instruction.mnemonic(),
+                Mnemonic::CLC
+                    | Mnemonic::CLD
+                    | Mnemonic::CLV
+                    | Mnemonic::CLI
+                    | Mnemonic::SEC
+                    | Mnemonic::SEI
+                    | Mnemonic::SED
+            ),
+            "Invalid Instruction given to flag: {instruction:?}"
+        );
+
+        match instruction.mnemonic() {
+            Mnemonic::CLC => self.sr &= !FLAG_CRY,
+            Mnemonic::CLD => self.sr &= !FLAG_DEC,
+            Mnemonic::CLV => self.sr &= !FLAG_OVF,
+            Mnemonic::CLI => self.sr &= !FLAG_INT,
+            Mnemonic::SEC => self.sr |= FLAG_CRY,
+            Mnemonic::SEI => self.sr |= FLAG_INT,
+            Mnemonic::SED => self.sr |= FLAG_DEC,
+            _ => unreachable!(),
+        }
 
         instruction.cycles()
     }

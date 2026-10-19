@@ -70,10 +70,22 @@ pub enum Mnemonic {
     RTS,
     // NOP
     NOP,
-    // Increment
+    // INCREMENT
     INC,
     INX,
     INY,
+    // DECREMENT
+    DEC,
+    DEX,
+    DEY,
+    // FLAGS
+    CLC,
+    CLD,
+    CLI,
+    CLV,
+    SEC,
+    SED,
+    SEI,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -241,6 +253,22 @@ impl Instruction {
             0xfe => Some(Instruction(Mnemonic::INC, AddressingMode::AbsoluteX)),
             0xe8 => Some(Instruction(Mnemonic::INX, AddressingMode::Implied)),
             0xc8 => Some(Instruction(Mnemonic::INY, AddressingMode::Implied)),
+            // DECREMENT
+            0xc6 => Some(Instruction(Mnemonic::DEC, AddressingMode::ZeroPage)),
+            0xd6 => Some(Instruction(Mnemonic::DEC, AddressingMode::ZeroPageX)),
+            0xce => Some(Instruction(Mnemonic::DEC, AddressingMode::Absolute)),
+            0xde => Some(Instruction(Mnemonic::DEC, AddressingMode::AbsoluteX)),
+            0xca => Some(Instruction(Mnemonic::DEX, AddressingMode::Implied)),
+            0x88 => Some(Instruction(Mnemonic::DEY, AddressingMode::Implied)),
+            // CLEAR FLAGS
+            0x18 => Some(Instruction(Mnemonic::CLC, AddressingMode::Implied)),
+            0xd8 => Some(Instruction(Mnemonic::CLD, AddressingMode::Implied)),
+            0x58 => Some(Instruction(Mnemonic::CLI, AddressingMode::Implied)),
+            0xb8 => Some(Instruction(Mnemonic::CLV, AddressingMode::Implied)),
+            // SET FLAGS
+            0x38 => Some(Instruction(Mnemonic::SEC, AddressingMode::Implied)),
+            0xf8 => Some(Instruction(Mnemonic::SED, AddressingMode::Implied)),
+            0x78 => Some(Instruction(Mnemonic::SEI, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -278,7 +306,14 @@ impl Instruction {
             | Instruction(Mnemonic::BCC, addressing_mode)
             | Instruction(Mnemonic::BPL, addressing_mode)
             | Instruction(Mnemonic::BVC, addressing_mode)
-            | Instruction(Mnemonic::NOP, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::NOP, addressing_mode)
+            | Instruction(Mnemonic::CLC, addressing_mode)
+            | Instruction(Mnemonic::CLD, addressing_mode)
+            | Instruction(Mnemonic::CLI, addressing_mode)
+            | Instruction(Mnemonic::CLV, addressing_mode)
+            | Instruction(Mnemonic::SEC, addressing_mode)
+            | Instruction(Mnemonic::SED, addressing_mode)
+            | Instruction(Mnemonic::SEI, addressing_mode) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
@@ -300,7 +335,10 @@ impl Instruction {
             | Instruction(Mnemonic::ROR, addressing_mode)
             | Instruction(Mnemonic::INC, addressing_mode)
             | Instruction(Mnemonic::INX, addressing_mode)
-            | Instruction(Mnemonic::INY, addressing_mode) => match addressing_mode {
+            | Instruction(Mnemonic::INY, addressing_mode)
+            | Instruction(Mnemonic::DEC, addressing_mode)
+            | Instruction(Mnemonic::DEX, addressing_mode)
+            | Instruction(Mnemonic::DEY, addressing_mode) => match addressing_mode {
                 AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 5,
                 AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,
