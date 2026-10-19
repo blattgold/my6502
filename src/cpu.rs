@@ -300,34 +300,34 @@ impl<M: Memory> CPU<M> {
 
         let binary_sum = a.wrapping_add(b).wrapping_add(carry_in);
 
-        let mut bcd_sum = binary_sum;
+        let lo = (a & 0x0f).wrapping_add(b & 0x0f).wrapping_add(carry_in);
 
-        let lo_nibble = bcd_sum & 0x0f;
-        let lo_carry = if lo_nibble > 0x09 {
-            let adjusted = lo_nibble.wrapping_add(6);
-            bcd_sum = (bcd_sum & 0xf0) | (adjusted & 0x0f);
-            1
+        let (lo_adjusted, lo_carry) = if lo > 0x09 {
+            let adjusted = lo.wrapping_add(6);
+            ((adjusted & 0x0f) | 0x10, 1)
         } else {
-            0
+            (lo, 0)
         };
 
-        self.flag_set_negative(bcd_sum);
-        self.flag_set_overflow(a, b, bcd_sum);
+        let decimal_intermediate_sum = (a & 0xf0).wrapping_add(b & 0xf0).wrapping_add(lo_adjusted);
 
-        let hi_nibble = bcd_sum >> 4;
-        let hi_nibble_carry = hi_nibble.wrapping_add(lo_carry);
-        let carry = if hi_nibble_carry > 0x09 {
-            let adjusted = hi_nibble_carry.wrapping_add(6);
-            bcd_sum = (adjusted << 4) | (bcd_sum & 0x0f);
-            true
+        let hi = ((a >> 4) & 0x0f)
+            .wrapping_add(b >> 4)
+            .wrapping_add(lo_carry);
+
+        let (hi_adjusted, carry_out) = if hi > 0x09 {
+            (hi.wrapping_add(6), true)
         } else {
-            false
+            (hi, false)
         };
 
-        self.a = bcd_sum;
+        let decimal_sum = (hi_adjusted << 4) | (lo_adjusted & 0x0f);
+        self.a = decimal_sum;
 
         self.flag_set_zero(binary_sum);
-        self.flag_set_carry(carry);
+        self.flag_set_carry(carry_out);
+        self.flag_set_overflow(a, b, decimal_intermediate_sum);
+        self.flag_set_negative(decimal_intermediate_sum);
 
         penalty + instruction.cycles()
     }
