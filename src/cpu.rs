@@ -117,12 +117,17 @@ impl<M: Memory> CPU<M> {
                 (addr_indexed, penalty)
             }
             AddressingMode::Indirect => {
-                let addr_lo = self.memory.read_byte(self.pc);
-                let addr_hi = self
-                    .memory
-                    .read_byte((self.pc.wrapping_add(1) & 0x00ff) | (self.pc & 0xff00));
+                let lookup_lo = self.memory.read_byte(self.pc);
+                let lookup_hi = self.memory.read_byte(self.pc.wrapping_add(1));
 
-                ((addr_hi as u16) << 8 | addr_lo as u16, 0)
+                let lookup_addr_1 = (lookup_hi as u16) << 8 | lookup_lo as u16;
+                let lookup_addr_2 = (lookup_hi as u16) << 8 | lookup_lo.wrapping_add(1) as u16;
+
+                let addr_lo = self.memory.read_byte(lookup_addr_1);
+                let addr_hi = self.memory.read_byte(lookup_addr_2);
+                let addr = ((addr_hi as u16) << 8) | addr_lo as u16;
+
+                (addr, 0)
             }
             AddressingMode::Implied => unreachable!(),
         }
