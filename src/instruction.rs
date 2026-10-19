@@ -110,6 +110,8 @@ pub enum Mnemonic {
     JAMF2,
     // USBC
     USBC,
+    // ALR
+    ALR,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -318,6 +320,8 @@ impl Instruction {
             0xf2 => Some(Instruction(Mnemonic::JAMF2, AddressingMode::Implied)),
             // USBC
             0xeb => Some(Instruction(Mnemonic::USBC, AddressingMode::Immediate)),
+            // ALR
+            0x4b => Some(Instruction(Mnemonic::ALR, AddressingMode::Immediate)),
             _ => None,
         }
     }
@@ -326,44 +330,48 @@ impl Instruction {
     pub fn cycles(self) -> usize {
         match self {
             // read
-            Instruction(Mnemonic::ADC, addressing_mode)
-            | Instruction(Mnemonic::SBC, addressing_mode)
-            | Instruction(Mnemonic::CPX, addressing_mode)
-            | Instruction(Mnemonic::CPY, addressing_mode)
-            | Instruction(Mnemonic::CMP, addressing_mode)
-            | Instruction(Mnemonic::AND, addressing_mode)
-            | Instruction(Mnemonic::EOR, addressing_mode)
-            | Instruction(Mnemonic::ORA, addressing_mode)
-            | Instruction(Mnemonic::BIT, addressing_mode)
-            | Instruction(Mnemonic::STA, addressing_mode)
-            | Instruction(Mnemonic::STX, addressing_mode)
-            | Instruction(Mnemonic::STY, addressing_mode)
-            | Instruction(Mnemonic::LDA, addressing_mode)
-            | Instruction(Mnemonic::LDX, addressing_mode)
-            | Instruction(Mnemonic::LDY, addressing_mode)
-            | Instruction(Mnemonic::TAX, addressing_mode)
-            | Instruction(Mnemonic::TAY, addressing_mode)
-            | Instruction(Mnemonic::TSX, addressing_mode)
-            | Instruction(Mnemonic::TXA, addressing_mode)
-            | Instruction(Mnemonic::TXS, addressing_mode)
-            | Instruction(Mnemonic::TYA, addressing_mode)
-            | Instruction(Mnemonic::BEQ, addressing_mode)
-            | Instruction(Mnemonic::BMI, addressing_mode)
-            | Instruction(Mnemonic::BCS, addressing_mode)
-            | Instruction(Mnemonic::BVS, addressing_mode)
-            | Instruction(Mnemonic::BNE, addressing_mode)
-            | Instruction(Mnemonic::BCC, addressing_mode)
-            | Instruction(Mnemonic::BPL, addressing_mode)
-            | Instruction(Mnemonic::BVC, addressing_mode)
-            | Instruction(Mnemonic::NOP, addressing_mode)
-            | Instruction(Mnemonic::CLC, addressing_mode)
-            | Instruction(Mnemonic::CLD, addressing_mode)
-            | Instruction(Mnemonic::CLI, addressing_mode)
-            | Instruction(Mnemonic::CLV, addressing_mode)
-            | Instruction(Mnemonic::SEC, addressing_mode)
-            | Instruction(Mnemonic::SED, addressing_mode)
-            | Instruction(Mnemonic::SEI, addressing_mode)
-            | Instruction(Mnemonic::USBC, addressing_mode) => match addressing_mode {
+            Instruction(
+                Mnemonic::ADC
+                | Mnemonic::SBC
+                | Mnemonic::CPX
+                | Mnemonic::CPY
+                | Mnemonic::CMP
+                | Mnemonic::AND
+                | Mnemonic::EOR
+                | Mnemonic::ORA
+                | Mnemonic::BIT
+                | Mnemonic::STA
+                | Mnemonic::STX
+                | Mnemonic::STY
+                | Mnemonic::LDA
+                | Mnemonic::LDX
+                | Mnemonic::LDY
+                | Mnemonic::TAX
+                | Mnemonic::TAY
+                | Mnemonic::TSX
+                | Mnemonic::TXA
+                | Mnemonic::TXS
+                | Mnemonic::TYA
+                | Mnemonic::BEQ
+                | Mnemonic::BMI
+                | Mnemonic::BCS
+                | Mnemonic::BVS
+                | Mnemonic::BNE
+                | Mnemonic::BCC
+                | Mnemonic::BPL
+                | Mnemonic::BVC
+                | Mnemonic::NOP
+                | Mnemonic::CLC
+                | Mnemonic::CLD
+                | Mnemonic::CLI
+                | Mnemonic::CLV
+                | Mnemonic::SEC
+                | Mnemonic::SED
+                | Mnemonic::SEI
+                | Mnemonic::USBC
+                | Mnemonic::ALR,
+                addressing_mode,
+            ) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX

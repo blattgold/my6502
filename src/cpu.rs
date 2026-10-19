@@ -281,6 +281,8 @@ impl<M: Memory> CPU<M> {
             Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
 
+            Mnemonic::ALR => self.alr(instruction),
+
             Mnemonic::JAM02
             | Mnemonic::JAM12
             | Mnemonic::JAM22
@@ -983,6 +985,29 @@ impl<M: Memory> CPU<M> {
             Mnemonic::PLP => self.sr = (self.pop_stack() & !FLAG_BRK) | FLAG_IGN,
             _ => unreachable!(),
         }
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn alr(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::ALR),
+            "Invalid Instruction given to alr: {instruction:?}"
+        );
+
+        let operand_1 = self.a;
+        let operand_2 = self.fetch(instruction.mode()).0;
+
+        let result_and = operand_1 & operand_2;
+        let result_shift = result_and >> 1;
+        let carry_out = (result_and & 1) == 1;
+
+        self.a = result_shift;
+
+        self.flag_set_negative(result_shift);
+        self.flag_set_zero(result_shift);
+        self.flag_set_carry(carry_out);
 
         instruction.cycles()
     }
