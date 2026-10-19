@@ -273,6 +273,7 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::SED
             | Mnemonic::SEI => self.flag(instruction),
             Mnemonic::BRK => self.brk(instruction),
+            Mnemonic::RTI => self.rti(instruction),
         }
     }
 
@@ -885,6 +886,7 @@ impl<M: Memory> CPU<M> {
         instruction.cycles()
     }
 
+    #[inline]
     fn brk(&mut self, instruction: Instruction) -> usize {
         let return_lo = self.pc.wrapping_add(1) as u8;
         let return_hi = ((self.pc.wrapping_add(1) & 0xff00) >> 8) as u8;
@@ -902,9 +904,26 @@ impl<M: Memory> CPU<M> {
         instruction.cycles()
     }
 
+    #[inline]
+    fn rti(&mut self, instruction: Instruction) -> usize {
+        let sr = self.pop_stack();
+        let return_lo = self.pop_stack();
+        let return_hi = self.pop_stack();
+
+        self.sr = (sr & !FLAG_BRK) | FLAG_IGN;
+        self.pc = ((return_hi as u16) << 8) | (return_lo as u16);
+
+        instruction.cycles()
+    }
+
     fn push_stack(&mut self, byte: u8) {
         self.memory.write_byte(self.sp_addr(), byte);
         self.sp = self.sp.wrapping_add(255);
+    }
+
+    fn pop_stack(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        self.memory.read_byte(self.sp_addr())
     }
 
     fn sp_addr(&self) -> u16 {
