@@ -278,6 +278,22 @@ impl<M: Memory> CPU<M> {
             Mnemonic::RTI => self.rti(instruction),
             Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
+
+            Mnemonic::JAM02
+            | Mnemonic::JAM12
+            | Mnemonic::JAM22
+            | Mnemonic::JAM32
+            | Mnemonic::JAM42
+            | Mnemonic::JAM52
+            | Mnemonic::JAM62
+            | Mnemonic::JAM72
+            | Mnemonic::JAM92
+            | Mnemonic::JAMB2
+            | Mnemonic::JAMD2
+            | Mnemonic::JAMF2 => {
+                self.state = CPUState::Jam;
+                instruction.cycles()
+            }
         }
     }
 

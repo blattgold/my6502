@@ -95,6 +95,19 @@ pub enum Mnemonic {
     // STACK PULL
     PLA,
     PLP,
+    // JAM
+    JAM02,
+    JAM12,
+    JAM22,
+    JAM32,
+    JAM42,
+    JAM52,
+    JAM62,
+    JAM72,
+    JAM92,
+    JAMB2,
+    JAMD2,
+    JAMF2,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -287,6 +300,20 @@ impl Instruction {
             // STACK POP
             0x68 => Some(Instruction(Mnemonic::PLA, AddressingMode::Implied)),
             0x28 => Some(Instruction(Mnemonic::PLP, AddressingMode::Implied)),
+            // -- UNDOCUMENTED --
+            // JAM
+            0x02 => Some(Instruction(Mnemonic::JAM02, AddressingMode::Implied)),
+            0x12 => Some(Instruction(Mnemonic::JAM12, AddressingMode::Implied)),
+            0x22 => Some(Instruction(Mnemonic::JAM22, AddressingMode::Implied)),
+            0x32 => Some(Instruction(Mnemonic::JAM32, AddressingMode::Implied)),
+            0x42 => Some(Instruction(Mnemonic::JAM42, AddressingMode::Implied)),
+            0x52 => Some(Instruction(Mnemonic::JAM52, AddressingMode::Implied)),
+            0x62 => Some(Instruction(Mnemonic::JAM62, AddressingMode::Implied)),
+            0x72 => Some(Instruction(Mnemonic::JAM72, AddressingMode::Implied)),
+            0x92 => Some(Instruction(Mnemonic::JAM92, AddressingMode::Implied)),
+            0xb2 => Some(Instruction(Mnemonic::JAMB2, AddressingMode::Implied)),
+            0xd2 => Some(Instruction(Mnemonic::JAMD2, AddressingMode::Implied)),
+            0xf2 => Some(Instruction(Mnemonic::JAMF2, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -420,6 +447,22 @@ impl Instruction {
                     "PLA & PLP Cycle Group should not have this addressing mode: {addressing_mode:?}"
                 ),
             },
+            // JAM
+            Instruction(
+                Mnemonic::JAM02
+                | Mnemonic::JAM12
+                | Mnemonic::JAM22
+                | Mnemonic::JAM32
+                | Mnemonic::JAM42
+                | Mnemonic::JAM52
+                | Mnemonic::JAM62
+                | Mnemonic::JAM72
+                | Mnemonic::JAM92
+                | Mnemonic::JAMB2
+                | Mnemonic::JAMD2
+                | Mnemonic::JAMF2,
+                _,
+            ) => 11,
         }
     }
 
