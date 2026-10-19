@@ -224,7 +224,8 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
         match instruction.mnemonic() {
-            Mnemonic::ADC | Mnemonic::SBC => self.adc_sbc(instruction),
+            Mnemonic::ADC => self.adc(instruction),
+            Mnemonic::SBC => self.adc_sbc(instruction),
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
@@ -259,6 +260,80 @@ impl<M: Memory> CPU<M> {
 
     /// return: cycles taken
     #[inline]
+    fn adc(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::ADC),
+            "Invalid Instruction given to adc: {instruction:?}",
+        );
+
+        if self.flag_get_decimal() {
+            self.adc_decimal(instruction)
+        } else {
+            self.adc_binary(instruction)
+        }
+    }
+
+    #[inline]
+    fn adc_binary(&mut self, instruction: Instruction) -> usize {
+        let a = self.a;
+        let (b, penalty) = self.fetch(instruction.mode());
+        let carry_in = self.flag_get_carry() as u8;
+
+        let sum = a.wrapping_add(b).wrapping_add(carry_in);
+        let carry_out = sum < a || b.wrapping_add(carry_in) < b;
+
+        self.a = sum;
+
+        self.flag_set_zero(sum);
+        self.flag_set_negative(sum);
+        self.flag_set_carry(carry_out);
+        self.flag_set_overflow(a, b, sum);
+
+        penalty + instruction.cycles()
+    }
+
+    #[inline]
+    fn adc_decimal(&mut self, instruction: Instruction) -> usize {
+        let a = self.a;
+        let (b, penalty) = self.fetch(instruction.mode());
+        let carry_in = self.flag_get_carry() as u8;
+
+        let binary_sum = a.wrapping_add(b).wrapping_add(carry_in);
+
+        let mut bcd_sum = binary_sum;
+
+        let lo_nibble = bcd_sum & 0x0f;
+        let lo_carry = if lo_nibble > 0x09 {
+            let adjusted = lo_nibble.wrapping_add(6);
+            bcd_sum = (bcd_sum & 0xf0) | (adjusted & 0x0f);
+            1
+        } else {
+            0
+        };
+
+        self.flag_set_negative(bcd_sum);
+        self.flag_set_overflow(a, b, bcd_sum);
+
+        let hi_nibble = bcd_sum >> 4;
+        let hi_nibble_carry = hi_nibble.wrapping_add(lo_carry);
+        let carry = if hi_nibble_carry > 0x09 {
+            let adjusted = hi_nibble_carry.wrapping_add(6);
+            bcd_sum = (adjusted << 4) | (bcd_sum & 0x0f);
+            true
+        } else {
+            false
+        };
+
+        self.a = bcd_sum;
+
+        self.flag_set_zero(binary_sum);
+        self.flag_set_carry(carry);
+
+        penalty + instruction.cycles()
+    }
+
+    // TODO replace
+    #[inline]
     fn adc_sbc(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
             instruction.mnemonic() == Mnemonic::ADC || instruction.mnemonic() == Mnemonic::SBC,
@@ -266,7 +341,6 @@ impl<M: Memory> CPU<M> {
         );
 
         let operand_1 = self.a;
-
         let (operand_2, penalty) = self.fetch(instruction.mode());
         let operand_2 = match instruction.mnemonic() {
             Mnemonic::ADC => operand_2,
@@ -274,15 +348,35 @@ impl<M: Memory> CPU<M> {
             _ => unreachable!(),
         };
 
-        let operand_2_carry = operand_2.wrapping_add(if self.flag_get_carry() { 1 } else { 0 });
+        let carry_in = if self.flag_get_carry() { 1 } else { 0 };
+        let operand_2_carry = operand_2.wrapping_add(carry_in);
+        let binary_result = operand_1.wrapping_add(operand_2_carry);
+        let binary_carry = binary_result < operand_1 || operand_2_carry < operand_2;
 
-        let result = operand_1.wrapping_add(operand_2_carry);
+        let (result, carry) = if self.flag_get_decimal() {
+            let mut bcd_result = binary_result;
+
+            let low_nibble_sum = (operand_1 & 0x0f).wrapping_add(operand_2_carry & 0x0f);
+            if (bcd_result & 0x0f) > 9 || low_nibble_sum > 0x0f {
+                bcd_result = bcd_result.wrapping_add(6);
+            }
+
+            let bcd_carry = binary_carry || (bcd_result >> 4) > 9;
+            if bcd_carry {
+                bcd_result = bcd_result.wrapping_add(0x60);
+            }
+
+            (bcd_result, bcd_carry)
+        } else {
+            (binary_result, binary_carry)
+        };
+
         self.a = result;
 
-        self.flag_set_zero(result);
-        self.flag_set_negative(result);
-        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
-        self.flag_set_overflow(operand_1, operand_2, result);
+        self.flag_set_zero(binary_result);
+        self.flag_set_negative(binary_result);
+        self.flag_set_carry(carry);
+        self.flag_set_overflow(operand_1, operand_2, binary_result);
         penalty + instruction.cycles()
     }
 
@@ -686,6 +780,10 @@ impl<M: Memory> CPU<M> {
 
     fn flag_get_overflow(&self) -> bool {
         (self.sr & FLAG_OVF) != 0
+    }
+
+    fn flag_get_decimal(&self) -> bool {
+        (self.sr & FLAG_DEC) != 0
     }
 
     fn flag_set_zero(&mut self, result: u8) {
