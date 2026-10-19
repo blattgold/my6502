@@ -14,8 +14,11 @@ pub const FLAG_IGN: u8 = 0b0010_0000;
 pub const FLAG_OVF: u8 = 0b0100_0000;
 pub const FLAG_NEG: u8 = 0b1000_0000;
 
-pub const RESET_VECTOR_LO: u16 = 0xFFFC;
-pub const RESET_VECTOR_HI: u16 = 0xFFFD;
+pub const RESET_VECTOR_LO: u16 = 0xfffc;
+pub const RESET_VECTOR_HI: u16 = 0xfffd;
+
+pub const IRQ_VECTOR_LO: u16 = 0xfffe;
+pub const IRQ_VECTOR_HI: u16 = 0xffff;
 
 pub const STACK_OFFSET: u16 = 256 * 1;
 
@@ -269,6 +272,7 @@ impl<M: Memory> CPU<M> {
             | Mnemonic::SEC
             | Mnemonic::SED
             | Mnemonic::SEI => self.flag(instruction),
+            Mnemonic::BRK => self.brk(instruction),
         }
     }
 
@@ -879,6 +883,28 @@ impl<M: Memory> CPU<M> {
         }
 
         instruction.cycles()
+    }
+
+    fn brk(&mut self, instruction: Instruction) -> usize {
+        let return_lo = self.pc.wrapping_add(1) as u8;
+        let return_hi = ((self.pc.wrapping_add(1) & 0xff00) >> 8) as u8;
+
+        self.push_stack(return_hi);
+        self.push_stack(return_lo);
+        self.push_stack(self.sr | FLAG_BRK | FLAG_IGN);
+
+        self.sr |= FLAG_INT;
+
+        let irq_addr_lo = self.memory.read_byte(IRQ_VECTOR_LO);
+        let irq_addr_hi = self.memory.read_byte(IRQ_VECTOR_HI);
+        self.pc = ((irq_addr_hi as u16) << 8) | (irq_addr_lo as u16);
+
+        instruction.cycles()
+    }
+
+    fn push_stack(&mut self, byte: u8) {
+        self.memory.write_byte(self.sp_addr(), byte);
+        self.sp = self.sp.wrapping_add(255);
     }
 
     fn sp_addr(&self) -> u16 {

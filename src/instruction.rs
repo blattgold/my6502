@@ -86,6 +86,8 @@ pub enum Mnemonic {
     SEC,
     SED,
     SEI,
+    // INTERRUPT
+    BRK,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -269,6 +271,8 @@ impl Instruction {
             0x38 => Some(Instruction(Mnemonic::SEC, AddressingMode::Implied)),
             0xf8 => Some(Instruction(Mnemonic::SED, AddressingMode::Implied)),
             0x78 => Some(Instruction(Mnemonic::SEI, AddressingMode::Implied)),
+            // BRK
+            0x00 => Some(Instruction(Mnemonic::BRK, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -373,6 +377,14 @@ impl Instruction {
 
                 _ => panic!(
                     "RTS Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
+            },
+            // BRK
+            Instruction(Mnemonic::BRK, addressing_mode) => match addressing_mode {
+                AddressingMode::Implied => 7,
+
+                _ => panic!(
+                    "BRK Cycle Group should not have this addressing mode: {addressing_mode:?}"
                 ),
             },
         }
