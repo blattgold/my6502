@@ -92,6 +92,9 @@ pub enum Mnemonic {
     // STACK PUSH
     PHA,
     PHP,
+    // STACK PULL
+    PLA,
+    PLP,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -281,6 +284,9 @@ impl Instruction {
             // STACK PUSH
             0x48 => Some(Instruction(Mnemonic::PHA, AddressingMode::Implied)),
             0x08 => Some(Instruction(Mnemonic::PHP, AddressingMode::Implied)),
+            // STACK POP
+            0x68 => Some(Instruction(Mnemonic::PLA, AddressingMode::Implied)),
+            0x28 => Some(Instruction(Mnemonic::PLP, AddressingMode::Implied)),
             _ => None,
         }
     }
@@ -403,6 +409,15 @@ impl Instruction {
 
                 _ => panic!(
                     "PHA & PHP Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                ),
+            },
+            // PLA & PLP
+            Instruction(Mnemonic::PLA, addressing_mode)
+            | Instruction(Mnemonic::PLP, addressing_mode) => match addressing_mode {
+                AddressingMode::Implied => 4,
+
+                _ => panic!(
+                    "PLA & PLP Cycle Group should not have this addressing mode: {addressing_mode:?}"
                 ),
             },
         }

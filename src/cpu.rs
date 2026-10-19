@@ -275,6 +275,7 @@ impl<M: Memory> CPU<M> {
             Mnemonic::BRK => self.brk(instruction),
             Mnemonic::RTI => self.rti(instruction),
             Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
+            Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
         }
     }
 
@@ -931,12 +932,32 @@ impl<M: Memory> CPU<M> {
     fn push_op(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
             matches!(instruction.mnemonic(), Mnemonic::PHA | Mnemonic::PHP),
-            "Invalid Instruction given to stack_push: {instruction:?}"
+            "Invalid Instruction given to push_op: {instruction:?}"
         );
 
         match instruction.mnemonic() {
             Mnemonic::PHA => self.push_stack(self.a),
             Mnemonic::PHP => self.push_stack(self.sr | FLAG_BRK | FLAG_IGN),
+            _ => unreachable!(),
+        }
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn pull_op(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::PLA | Mnemonic::PLP),
+            "Invalid Instruction given to pull_op: {instruction:?}"
+        );
+
+        match instruction.mnemonic() {
+            Mnemonic::PLA => {
+                self.a = self.pop_stack();
+                self.flag_set_zero(self.a);
+                self.flag_set_negative(self.a);
+            }
+            Mnemonic::PLP => self.sr = (self.pop_stack() & !FLAG_BRK) | FLAG_IGN,
             _ => unreachable!(),
         }
 
