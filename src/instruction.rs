@@ -112,6 +112,9 @@ pub enum Mnemonic {
     USBC,
     // ALR
     ALR,
+    // ANC
+    ANC,
+    ANC2,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -322,6 +325,9 @@ impl Instruction {
             0xeb => Some(Instruction(Mnemonic::USBC, AddressingMode::Immediate)),
             // ALR
             0x4b => Some(Instruction(Mnemonic::ALR, AddressingMode::Immediate)),
+            // ANC
+            0x0b => Some(Instruction(Mnemonic::ANC, AddressingMode::Immediate)),
+            0x2b => Some(Instruction(Mnemonic::ANC2, AddressingMode::Immediate)),
             _ => None,
         }
     }
@@ -369,7 +375,9 @@ impl Instruction {
                 | Mnemonic::SED
                 | Mnemonic::SEI
                 | Mnemonic::USBC
-                | Mnemonic::ALR,
+                | Mnemonic::ALR
+                | Mnemonic::ANC
+                | Mnemonic::ANC2,
                 addressing_mode,
             ) => match addressing_mode {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,

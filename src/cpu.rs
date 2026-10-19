@@ -282,6 +282,7 @@ impl<M: Memory> CPU<M> {
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
 
             Mnemonic::ALR => self.alr(instruction),
+            Mnemonic::ANC | Mnemonic::ANC2 => self.anc(instruction),
 
             Mnemonic::JAM02
             | Mnemonic::JAM12
@@ -1007,6 +1008,28 @@ impl<M: Memory> CPU<M> {
 
         self.flag_set_negative(result_shift);
         self.flag_set_zero(result_shift);
+        self.flag_set_carry(carry_out);
+
+        instruction.cycles()
+    }
+
+    #[inline]
+    fn anc(&mut self, instruction: Instruction) -> usize {
+        debug_assert!(
+            matches!(instruction.mnemonic(), Mnemonic::ANC | Mnemonic::ANC2),
+            "Invalid Instruction given to anc: {instruction:?}"
+        );
+
+        let operand_1 = self.a;
+        let operand_2 = self.fetch(instruction.mode()).0;
+
+        let result_and = operand_1 & operand_2;
+        let carry_out = result_and & 0b1000_0000 != 0;
+
+        self.a = result_and;
+
+        self.flag_set_negative(result_and);
+        self.flag_set_zero(result_and);
         self.flag_set_carry(carry_out);
 
         instruction.cycles()
