@@ -25,6 +25,7 @@ pub const STACK_OFFSET: u16 = 256 * 1;
 pub enum CPUState {
     Reset,
     Running,
+    Jam,
 }
 
 pub struct CPU<M: Memory> {
@@ -199,9 +200,6 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn step(&mut self) -> Result<()> {
-        let opcode = self.memory.read_byte(self.pc);
-        self.pc = self.pc.wrapping_add(1);
-
         match self.state {
             CPUState::Reset => {
                 self.sp = self.sp.wrapping_add(253);
@@ -213,6 +211,9 @@ impl<M: Memory> CPU<M> {
                 Ok(())
             }
             CPUState::Running => {
+                let opcode = self.memory.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+
                 if let Some(instruction) = Instruction::from_opcode(opcode) {
                     self.cycles += self.exec(instruction);
                     Ok(())
@@ -220,6 +221,7 @@ impl<M: Memory> CPU<M> {
                     Err(anyhow!("Invalid or unimplemented opcode: {opcode}"))
                 }
             }
+            CPUState::Jam => Ok(()),
         }
     }
 
