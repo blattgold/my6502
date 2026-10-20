@@ -454,6 +454,28 @@ impl<M: Memory> CPU<M> {
 
                         self.pc = (((pc_hi as u16) << 8) | (pc_lo as u16)).wrapping_add(1);
                     }
+                    Mnemonic::BRK => {
+                        let return_lo = self.pc.wrapping_add(1) as u8;
+                        let return_hi = ((self.pc.wrapping_add(1) & 0xff00) >> 8) as u8;
+
+                        self.push_stack(return_hi);
+                        self.push_stack(return_lo);
+                        self.push_stack(self.sr | FLAG_BRK | FLAG_IGN);
+
+                        self.sr |= FLAG_INT;
+
+                        let irq_addr_lo = self.memory.read_byte(IRQ_VECTOR_LO);
+                        let irq_addr_hi = self.memory.read_byte(IRQ_VECTOR_HI);
+                        self.pc = ((irq_addr_hi as u16) << 8) | (irq_addr_lo as u16);
+                    }
+                    Mnemonic::PHA => self.push_stack(self.a),
+                    Mnemonic::PHP => self.push_stack(self.sr | FLAG_BRK | FLAG_IGN),
+                    Mnemonic::PLA => {
+                        self.a = self.pop_stack();
+                        self.flag_set_zero(self.a);
+                        self.flag_set_negative(self.a);
+                    }
+                    Mnemonic::PLP => self.sr = (self.pop_stack() & !FLAG_BRK) | FLAG_IGN,
                     Mnemonic::CLC => self.sr &= !FLAG_CRY,
                     Mnemonic::CLD => self.sr &= !FLAG_DEC,
                     Mnemonic::CLI => self.sr &= !FLAG_INT,
@@ -594,6 +616,67 @@ impl<M: Memory> CPU<M> {
                                 }
                             }
                             Mnemonic::JMP => self.pc = addr,
+                            Mnemonic::ALR => {
+                                let operand = self.memory.read_byte(addr);
+
+                                let result_and = self.a & operand;
+                                let result_shift = result_and >> 1;
+                                let carry_out = (result_and & 1) == 1;
+
+                                self.a = result_shift;
+
+                                self.flag_set_negative(result_shift);
+                                self.flag_set_zero(result_shift);
+                                self.flag_set_carry(carry_out);
+                            }
+                            Mnemonic::ANC | Mnemonic::ANC2 => {
+                                let operand = self.memory.read_byte(addr);
+
+                                let result_and = self.a & operand;
+                                let carry_out = result_and & 0b1000_0000 != 0;
+
+                                self.a = result_and;
+
+                                self.flag_set_negative(result_and);
+                                self.flag_set_zero(result_and);
+                                self.flag_set_carry(carry_out);
+                            }
+                            Mnemonic::ARR => {
+                                let operand = self.memory.read_byte(addr);
+
+                                let result_and = self.a & operand;
+                                let result_ror = (result_and >> 1)
+                                    | if self.flag_get_carry() {
+                                        0b1000_0000
+                                    } else {
+                                        0
+                                    };
+
+                                self.flag_set_negative(result_ror);
+                                self.flag_set_zero(result_ror);
+                                self.flag_set_carry((result_ror & 0x40) != 0);
+
+                                if (((result_ror >> 6) ^ (result_ror >> 5)) & 1) != 0 {
+                                    self.sr |= FLAG_OVF;
+                                } else {
+                                    self.sr &= !FLAG_OVF;
+                                }
+
+                                self.a = result_ror;
+                            }
+                            Mnemonic::DCP => {
+                                let result_dec = self.memory.read_byte(addr).wrapping_add(255);
+                                self.memory.write_byte(addr, result_dec);
+
+                                let operand = !result_dec;
+                                let operand_carry = operand.wrapping_add(1);
+
+                                let result = self.a.wrapping_add(operand_carry);
+
+                                self.flag_set_zero(result);
+                                self.flag_set_negative(result);
+                                self.flag_set_carry(result < self.a || operand_carry < operand);
+                            }
                             _ => todo!(),
                         }
 
@@ -1027,193 +1110,6 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result);
         self.flag_set_zero(result);
         self.memory.write_byte(addr, result);
-    }
-
-    #[inline]
-    fn dec(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::DEC),
-            "Invalid Instruction given to dec: {instruction:?}"
-        );
-
-        let addr = self.resolve_address_old(instruction.mode()).0;
-        let result = self.memory.read_byte(addr).wrapping_add(255);
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.write(instruction.mode(), result);
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn dex(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::DEX),
-            "Invalid Instruction given to dex: {instruction:?}"
-        );
-
-        debug_assert!(
-            matches!(instruction.mode(), AddressingMode::Implied),
-            "Invalid Mode for DEX: {:?}",
-            instruction.mode()
-        );
-
-        let result = self.x.wrapping_add(255);
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.x = result;
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn dey(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::DEY),
-            "Invalid Instruction given to dey: {instruction:?}"
-        );
-
-        debug_assert!(
-            matches!(instruction.mode(), AddressingMode::Implied),
-            "Invalid Mode for DEY: {:?}",
-            instruction.mode()
-        );
-
-        let result = self.y.wrapping_add(255);
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.y = result;
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn flag(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::CLC
-                    | Mnemonic::CLD
-                    | Mnemonic::CLV
-                    | Mnemonic::CLI
-                    | Mnemonic::SEC
-                    | Mnemonic::SEI
-                    | Mnemonic::SED
-            ),
-            "Invalid Instruction given to flag: {instruction:?}"
-        );
-
-        match instruction.mnemonic() {
-            Mnemonic::CLC => self.sr &= !FLAG_CRY,
-            Mnemonic::CLD => self.sr &= !FLAG_DEC,
-            Mnemonic::CLV => self.sr &= !FLAG_OVF,
-            Mnemonic::CLI => self.sr &= !FLAG_INT,
-            Mnemonic::SEC => self.sr |= FLAG_CRY,
-            Mnemonic::SEI => self.sr |= FLAG_INT,
-            Mnemonic::SED => self.sr |= FLAG_DEC,
-            _ => unreachable!(),
-        }
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn brk(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::BRK),
-            "Invalid Instruction given to brk: {instruction:?}"
-        );
-
-        let return_lo = self.pc.wrapping_add(1) as u8;
-        let return_hi = ((self.pc.wrapping_add(1) & 0xff00) >> 8) as u8;
-
-        self.push_stack(return_hi);
-        self.push_stack(return_lo);
-        self.push_stack(self.sr | FLAG_BRK | FLAG_IGN);
-
-        self.sr |= FLAG_INT;
-
-        let irq_addr_lo = self.memory.read_byte(IRQ_VECTOR_LO);
-        let irq_addr_hi = self.memory.read_byte(IRQ_VECTOR_HI);
-        self.pc = ((irq_addr_hi as u16) << 8) | (irq_addr_lo as u16);
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn rti(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::RTI),
-            "Invalid Instruction given to rti: {instruction:?}"
-        );
-
-        let sr = self.pop_stack();
-        let return_lo = self.pop_stack();
-        let return_hi = self.pop_stack();
-
-        self.sr = (sr & !FLAG_BRK) | FLAG_IGN;
-        self.pc = ((return_hi as u16) << 8) | (return_lo as u16);
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn push_op(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::PHA | Mnemonic::PHP),
-            "Invalid Instruction given to push_op: {instruction:?}"
-        );
-
-        match instruction.mnemonic() {
-            Mnemonic::PHA => self.push_stack(self.a),
-            Mnemonic::PHP => self.push_stack(self.sr | FLAG_BRK | FLAG_IGN),
-            _ => unreachable!(),
-        }
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn pull_op(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::PLA | Mnemonic::PLP),
-            "Invalid Instruction given to pull_op: {instruction:?}"
-        );
-
-        match instruction.mnemonic() {
-            Mnemonic::PLA => {
-                self.a = self.pop_stack();
-                self.flag_set_zero(self.a);
-                self.flag_set_negative(self.a);
-            }
-            Mnemonic::PLP => self.sr = (self.pop_stack() & !FLAG_BRK) | FLAG_IGN,
-            _ => unreachable!(),
-        }
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn alr(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::ALR),
-            "Invalid Instruction given to alr: {instruction:?}"
-        );
-
-        let operand_1 = self.a;
-        let operand_2 = self.fetch(instruction.mode()).0;
-
-        let result_and = operand_1 & operand_2;
-        let result_shift = result_and >> 1;
-        let carry_out = (result_and & 1) == 1;
-
-        self.a = result_shift;
-
-        self.flag_set_negative(result_shift);
-        self.flag_set_zero(result_shift);
-        self.flag_set_carry(carry_out);
-
-        instruction.cycles()
     }
 
     #[inline]
