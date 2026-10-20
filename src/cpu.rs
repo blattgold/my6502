@@ -600,6 +600,16 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_negative(result);
                                 self.flag_set_carry(result < self.a || operand_carry < operand);
                             }
+                            Mnemonic::LAS => {
+                                let operand = self.memory.read_byte(addr);
+                                let result = operand & self.sp;
+                                self.a = result;
+                                self.x = result;
+                                self.sp = result;
+
+                                self.flag_set_zero(result);
+                                self.flag_set_negative(result);
+                            }
                             _ => todo!(),
                         }
 
