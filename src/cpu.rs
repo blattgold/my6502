@@ -626,6 +626,15 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_negative(self.a);
                                 self.flag_set_zero(self.a);
                             }
+                            Mnemonic::RRA => {
+                                self.ror_mem_part(addr);
+
+                                if self.flag_get_decimal() {
+                                    self.adc_decimal_part(addr);
+                                } else {
+                                    self.arithmetic_binary_part(addr, false);
+                                }
+                            }
                             Mnemonic::LXA | Mnemonic::ANE => {}
                             _ => todo!(),
                         }

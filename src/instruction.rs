@@ -120,6 +120,7 @@ pub enum Mnemonic {
     LXA,
     ANE,
     RLA,
+    RRA,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -389,6 +390,14 @@ impl Instruction {
             0x3b => Some(Instruction(Mnemonic::RLA, AddressingMode::AbsoluteY)),
             0x23 => Some(Instruction(Mnemonic::RLA, AddressingMode::IndirectX)),
             0x33 => Some(Instruction(Mnemonic::RLA, AddressingMode::IndirectY)),
+            // RRA
+            0x67 => Some(Instruction(Mnemonic::RRA, AddressingMode::ZeroPage)),
+            0x77 => Some(Instruction(Mnemonic::RRA, AddressingMode::ZeroPageX)),
+            0x6f => Some(Instruction(Mnemonic::RRA, AddressingMode::Absolute)),
+            0x7f => Some(Instruction(Mnemonic::RRA, AddressingMode::AbsoluteX)),
+            0x7b => Some(Instruction(Mnemonic::RRA, AddressingMode::AbsoluteY)),
+            0x63 => Some(Instruction(Mnemonic::RRA, AddressingMode::IndirectX)),
+            0x73 => Some(Instruction(Mnemonic::RRA, AddressingMode::IndirectY)),
             _ => None,
         }
     }
@@ -446,7 +455,8 @@ impl Instruction {
             | Mnemonic::DCP
             | Mnemonic::LSR
             | Mnemonic::ISC
-            | Mnemonic::RLA => CycleProfile::ReadWrite,
+            | Mnemonic::RLA
+            | Mnemonic::RRA => CycleProfile::ReadWrite,
 
             Mnemonic::BEQ
             | Mnemonic::BCS
