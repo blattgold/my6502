@@ -610,6 +610,14 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_zero(result);
                                 self.flag_set_negative(result);
                             }
+                            Mnemonic::LAX => {
+                                let operand = self.memory.read_byte(addr);
+                                self.a = operand;
+                                self.x = operand;
+
+                                self.flag_set_zero(operand);
+                                self.flag_set_negative(operand);
+                            }
                             _ => todo!(),
                         }
 
