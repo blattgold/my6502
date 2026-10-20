@@ -521,6 +521,44 @@ impl<M: Memory> CPU<M> {
 
                         instruction.cycles()
                     }
+                    // they take special kind of penalties
+                    Mnemonic::BEQ
+                    | Mnemonic::BNE
+                    | Mnemonic::BCS
+                    | Mnemonic::BCC
+                    | Mnemonic::BMI
+                    | Mnemonic::BPL
+                    | Mnemonic::BVS
+                    | Mnemonic::BVC => {
+                        let branch_taken = match instruction.mnemonic() {
+                            Mnemonic::BEQ => self.flag_get_zero(),
+                            Mnemonic::BNE => !self.flag_get_zero(),
+                            Mnemonic::BCS => self.flag_get_carry(),
+                            Mnemonic::BCC => !self.flag_get_carry(),
+                            Mnemonic::BMI => self.flag_get_negative(),
+                            Mnemonic::BPL => !self.flag_get_negative(),
+                            Mnemonic::BVS => self.flag_get_overflow(),
+                            Mnemonic::BVC => !self.flag_get_overflow(),
+                            _ => unreachable!(),
+                        };
+
+                        if branch_taken {
+                            let offset = self.fetch(instruction.mode()).0 as i8 as i16 as u16;
+                            let pc_target = self.pc.wrapping_add(offset);
+
+                            let cycles = if pc_target & 0xff00 == self.pc & 0xff00 {
+                                instruction.cycles() + 1
+                            } else {
+                                instruction.cycles() + 2
+                            };
+
+                            self.pc = pc_target;
+                            cycles
+                        } else {
+                            _ = self.fetch(instruction.mode());
+                            instruction.cycles()
+                        }
+                    }
                     _ => {
                         let ResolvedAddress { addr, penalty, .. } =
                             self.resolve_address(instruction.mode());
@@ -1110,89 +1148,6 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(result);
         self.flag_set_zero(result);
         self.memory.write_byte(addr, result);
-    }
-
-    #[inline]
-    fn anc(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::ANC | Mnemonic::ANC2),
-            "Invalid Instruction given to anc: {instruction:?}"
-        );
-
-        let operand_1 = self.a;
-        let operand_2 = self.fetch(instruction.mode()).0;
-
-        let result_and = operand_1 & operand_2;
-        let carry_out = result_and & 0b1000_0000 != 0;
-
-        self.a = result_and;
-
-        self.flag_set_negative(result_and);
-        self.flag_set_zero(result_and);
-        self.flag_set_carry(carry_out);
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn arr(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::ARR),
-            "Invalid Instruction given to arr: {instruction:?}"
-        );
-
-        let operand_1 = self.a;
-        let operand_2 = self.fetch(instruction.mode()).0;
-
-        let result_and = operand_1 & operand_2;
-        let result_ror = (result_and >> 1)
-            | if self.flag_get_carry() {
-                0b1000_0000
-            } else {
-                0
-            };
-
-        self.flag_set_negative(result_ror);
-        self.flag_set_zero(result_ror);
-        self.flag_set_carry((result_ror & 0x40) != 0);
-
-        if (((result_ror >> 6) ^ (result_ror >> 5)) & 1) != 0 {
-            self.sr |= FLAG_OVF;
-        } else {
-            self.sr &= !FLAG_OVF;
-        }
-
-        self.a = result_ror;
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn dcp(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::DCP),
-            "Invalid Instruction given to dcp: {instruction:?}"
-        );
-
-        let byte = {
-            let addr = self.resolve_address_old(instruction.mode()).0;
-            self.memory.read_byte(addr)
-        };
-
-        let result_dec = byte.wrapping_add(255);
-        self.write(instruction.mode(), result_dec);
-
-        let operand_1 = self.a;
-        let operand_2 = !result_dec;
-        let operand_2_carry = operand_2.wrapping_add(1);
-
-        let result = operand_1.wrapping_add(operand_2_carry);
-
-        self.flag_set_zero(result);
-        self.flag_set_negative(result);
-        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
-
-        instruction.cycles()
     }
 
     fn push_stack(&mut self, byte: u8) {
