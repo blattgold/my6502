@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 
 use crate::{
-    instruction::{AddressingMode, Instruction, Mnemonic},
+    instruction::{AddressingMode, CycleProfile, Instruction, Mnemonic},
     memory::Memory,
 };
 
@@ -356,25 +356,162 @@ impl<M: Memory> CPU<M> {
     }
 
     /// return: cycles this instruction took
-    #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
+        match instruction.mode() {
+            AddressingMode::Implied => {
+                // without operands
+                match instruction.mnemonic() {
+                    Mnemonic::INX => {
+                        self.x = self.x.wrapping_add(1);
+                        self.flag_set_negative(self.x);
+                        self.flag_set_zero(self.x);
+                    }
+                    Mnemonic::TXS => self.sp = self.x,
+                    Mnemonic::TAY => {
+                        self.y = self.a;
+                        self.flag_set_zero(self.y);
+                        self.flag_set_negative(self.y);
+                    }
+                    Mnemonic::TSX => {
+                        self.x = self.sp;
+                        self.flag_set_zero(self.x);
+                        self.flag_set_negative(self.x);
+                    }
+                    Mnemonic::TXA => {
+                        self.a = self.x;
+                        self.flag_set_zero(self.a);
+                        self.flag_set_negative(self.a);
+                    }
+                    Mnemonic::TAX => {
+                        self.x = self.a;
+                        self.flag_set_zero(self.x);
+                        self.flag_set_negative(self.x);
+                    }
+                    Mnemonic::TYA => {
+                        self.a = self.y;
+                        self.flag_set_zero(self.a);
+                        self.flag_set_negative(self.a);
+                    }
+                    Mnemonic::ASL => {
+                        let carry = self.a & 0b1000_0000 != 0;
+                        self.a = self.a << 1;
+                        self.flag_set_zero(self.a);
+                        self.flag_set_negative(self.a);
+                        self.flag_set_carry(carry);
+                    }
+                    _ => todo!(),
+                };
+
+                instruction.cycles()
+            }
+            // with operands
+            _ => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                match instruction.mnemonic() {
+                    Mnemonic::ADC => {
+                        if self.flag_get_decimal() {
+                            self.adc_decimal_part(addr);
+                        } else {
+                            self.arithmetic_binary_part(addr, false);
+                        }
+                    }
+                    Mnemonic::SBC | Mnemonic::USBC => {
+                        if self.flag_get_decimal() {
+                            self.sbc_decimal_part(addr);
+                        } else {
+                            self.arithmetic_binary_part(addr, true);
+                        }
+                    }
+                    Mnemonic::STA => {
+                        self.memory.write_byte(addr, self.a);
+                    }
+                    Mnemonic::STX => {
+                        self.memory.write_byte(addr, self.x);
+                    }
+                    Mnemonic::STY => {
+                        self.memory.write_byte(addr, self.y);
+                    }
+                    Mnemonic::LDA => {
+                        self.lda_part(addr);
+                    }
+                    Mnemonic::LDX => {
+                        self.ldx_part(addr);
+                    }
+                    Mnemonic::LDY => {
+                        self.ldy_part(addr);
+                    }
+                    Mnemonic::CMP | Mnemonic::CPX | Mnemonic::CPY => {
+                        let reg = match instruction.mnemonic() {
+                            Mnemonic::CMP => self.a,
+                            Mnemonic::CPX => self.x,
+                            Mnemonic::CPY => self.y,
+                            _ => unreachable!(),
+                        };
+
+                        let operand = !self.memory.read_byte(addr);
+                        let operand_carry = operand.wrapping_add(1);
+                        let sum = reg.wrapping_add(operand_carry);
+
+                        self.flag_set_zero(sum);
+                        self.flag_set_negative(sum);
+                        self.flag_set_carry(sum < reg || operand_carry < operand);
+                    }
+                    Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
+                        let operand = self.memory.read_byte(addr);
+                        self.a = match instruction.mnemonic() {
+                            Mnemonic::AND => self.a & operand,
+                            Mnemonic::EOR => self.a ^ operand,
+                            Mnemonic::ORA => self.a | operand,
+                            _ => unreachable!(),
+                        };
+                        self.flag_set_negative(self.a);
+                        self.flag_set_zero(self.a);
+                    }
+                    Mnemonic::BIT => {
+                        let operand = self.memory.read_byte(addr);
+
+                        self.flag_set_zero(self.a & operand);
+                        self.sr &= 0b0011_1111;
+                        self.sr |= operand & 0b1100_0000;
+                    }
+                    Mnemonic::ASL => {
+                        self.asl_mem_part(addr);
+                    }
+
+                    _ => todo!(),
+                }
+
+                instruction.cycles()
+                    + if matches!(instruction.profile(), CycleProfile::Read) {
+                        penalty
+                    } else {
+                        0
+                    }
+            }
+        }
+
+        /*
         match instruction.mnemonic() {
             Mnemonic::ADC => {
-                let (operand_2, penalty) = self.fetch(instruction.mode());
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
                 if self.flag_get_decimal() {
-                    self.adc_decimal_part(operand_2);
+                    self.adc_decimal_part(addr);
                 } else {
-                    self.arithmetic_binary_part(operand_2);
+                    self.arithmetic_binary_part(addr, false);
                 }
 
                 instruction.cycles() + penalty
             }
             Mnemonic::SBC | Mnemonic::USBC => {
-                let (operand_2, penalty) = self.fetch(instruction.mode());
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
                 if self.flag_get_decimal() {
-                    self.sbc_decimal_part(operand_2);
+                    self.sbc_decimal_part(addr);
                 } else {
-                    self.arithmetic_binary_part(!operand_2);
+                    self.arithmetic_binary_part(addr, true);
                 }
 
                 instruction.cycles() + penalty
@@ -382,8 +519,55 @@ impl<M: Memory> CPU<M> {
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
+            Mnemonic::STA => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.memory.write_byte(addr, self.a);
+
+                instruction.cycles()
+            }
+            Mnemonic::STX => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.memory.write_byte(addr, self.a);
+
+                instruction.cycles()
+            }
+            Mnemonic::STY => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.memory.write_byte(addr, self.a);
+
+                instruction.cycles()
+            }
             Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => self.store(instruction),
-            Mnemonic::LDA | Mnemonic::LDX | Mnemonic::LDY => self.load(instruction),
+            Mnemonic::LDA => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.lda_part(addr);
+
+                instruction.cycles() + penalty
+            }
+            Mnemonic::LDX => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.ldx_part(addr);
+
+                instruction.cycles() + penalty
+            }
+            Mnemonic::LDY => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
+
+                self.ldy_part(addr);
+
+                instruction.cycles() + penalty
+            }
             Mnemonic::TAX
             | Mnemonic::TAY
             | Mnemonic::TSX
@@ -404,7 +588,7 @@ impl<M: Memory> CPU<M> {
             Mnemonic::JMP => self.jmp(instruction),
             Mnemonic::JSR => self.jsr(instruction),
             Mnemonic::RTS => self.rts(instruction),
-            Mnemonic::NOP => self.nop(instruction),
+            Mnemonic::NOP => instruction.cycles(),
             Mnemonic::INC => {
                 let ResolvedAddress { addr, .. } = self.resolve_address(instruction.mode());
 
@@ -431,13 +615,18 @@ impl<M: Memory> CPU<M> {
                 let ResolvedAddress { addr, .. } = self.resolve_address(instruction.mode());
 
                 self.inc_part(addr);
-                let operand_2 = self.memory.read_byte(addr);
 
                 if self.flag_get_decimal() {
-                    self.sbc_decimal_part(operand_2);
+                    self.sbc_decimal_part(addr);
                 } else {
-                    self.arithmetic_binary_part(!operand_2);
+                    self.arithmetic_binary_part(addr, true);
                 }
+
+                instruction.cycles()
+            }
+            Mnemonic::LAS => {
+                let ResolvedAddress { addr, penalty, .. } =
+                    self.resolve_address(instruction.mode());
 
                 instruction.cycles()
             }
@@ -464,12 +653,16 @@ impl<M: Memory> CPU<M> {
                 instruction.cycles()
             }
         }
+
+        */
     }
 
     /// operand_1 is always A
     #[inline(always)]
-    fn arithmetic_binary_part(&mut self, operand_2: u8) {
+    fn arithmetic_binary_part(&mut self, addr: u16, sbc: bool) {
         let operand_1 = self.a;
+        let operand_2 = self.memory.read_byte(addr);
+        let operand_2 = if sbc { !operand_2 } else { operand_2 };
         let carry_in = self.flag_get_carry() as u8;
 
         let sum = operand_1.wrapping_add(operand_2).wrapping_add(carry_in);
@@ -490,8 +683,9 @@ impl<M: Memory> CPU<M> {
     /// - *C* is set based on the BCD carry.
     /// - *N* and *V* are set based on an intermediate sum, where the high nibble has not been decimal adjusted.
     #[inline(always)]
-    fn adc_decimal_part(&mut self, operand_2: u8) {
+    fn adc_decimal_part(&mut self, addr: u16) {
         let operand_1 = self.a;
+        let operand_2 = self.memory.read_byte(addr);
 
         let carry_in = self.flag_get_carry() as u8;
 
@@ -538,8 +732,9 @@ impl<M: Memory> CPU<M> {
     /// - *Z*, *N* and *V* are set based on the binary sum.
     /// - *C* is set based on the BCD borrow.
     #[inline(always)]
-    fn sbc_decimal_part(&mut self, operand_2: u8) {
+    fn sbc_decimal_part(&mut self, addr: u16) {
         let operand_1 = self.a;
+        let operand_2 = self.memory.read_byte(addr);
 
         let carry_in = self.flag_get_carry() as u8;
 
@@ -651,24 +846,25 @@ impl<M: Memory> CPU<M> {
         penalty + instruction.cycles()
     }
 
-    #[inline]
-    fn store(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::STA | Mnemonic::STX | Mnemonic::STY
-            ),
-            "Invalid Instruction given to store: {instruction:?}"
-        );
+    #[inline(always)]
+    fn lda_part(&mut self, addr: u16) {
+        self.a = self.memory.read_byte(addr);
+        self.flag_set_negative(self.a);
+        self.flag_set_zero(self.a);
+    }
 
-        let operand = match instruction.mnemonic() {
-            Mnemonic::STA => self.a,
-            Mnemonic::STX => self.x,
-            Mnemonic::STY => self.y,
-            _ => unreachable!(),
-        };
+    #[inline(always)]
+    fn ldx_part(&mut self, addr: u16) {
+        self.x = self.memory.read_byte(addr);
+        self.flag_set_negative(self.x);
+        self.flag_set_zero(self.x);
+    }
 
-        self.write(instruction.mode(), operand) + instruction.cycles()
+    #[inline(always)]
+    fn ldy_part(&mut self, addr: u16) {
+        self.y = self.memory.read_byte(addr);
+        self.flag_set_negative(self.y);
+        self.flag_set_zero(self.y);
     }
 
     #[inline]
@@ -736,6 +932,17 @@ impl<M: Memory> CPU<M> {
         }
 
         instruction.cycles()
+    }
+
+    #[inline(always)]
+    fn asl_mem_part(&mut self, addr: u16) {
+        let operand = self.memory.read_byte(addr);
+        let result = operand << 1;
+        let carry = operand & 0b1000_0000 != 0;
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.flag_set_carry(carry);
+        self.memory.write_byte(addr, result);
     }
 
     #[inline]
@@ -898,27 +1105,6 @@ impl<M: Memory> CPU<M> {
         let pc_hi = self.memory.read_byte(self.sp_addr());
 
         self.pc = (((pc_hi as u16) << 8) | (pc_lo as u16)).wrapping_add(1);
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn nop(&mut self, _instruction: Instruction) -> usize {
-        2
-    }
-
-    #[inline(always)]
-    fn inc(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::INC),
-            "Invalid Instruction given to inc: {instruction:?}"
-        );
-
-        let addr = self.resolve_address_old(instruction.mode()).0;
-        let result = self.memory.read_byte(addr).wrapping_add(1);
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.write(instruction.mode(), result);
-
         instruction.cycles()
     }
 

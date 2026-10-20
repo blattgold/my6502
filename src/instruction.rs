@@ -1,3 +1,5 @@
+use crate::instruction::Mnemonic::JAM22;
+
 /// ---
 /// Implied mode is also used for Accumulator mode
 /// ---
@@ -121,6 +123,25 @@ pub enum Mnemonic {
     DCP,
     // ISC,
     ISC,
+    // LAS
+    LAS,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CycleProfile {
+    /// Instructions with this profile either only read memory, or they don't read memory at all.
+    /// INX = Read (doesn't read memory), INC = Read (reads memory)
+    Read,
+    Write,
+    ReadWrite,
+    Branch,
+    JMP,
+    JSR,
+    Return,
+    BRK,
+    Push,
+    Pull,
+    JAM,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -352,59 +373,98 @@ impl Instruction {
             0xfb => Some(Instruction(Mnemonic::ISC, AddressingMode::AbsoluteY)),
             0xe3 => Some(Instruction(Mnemonic::ISC, AddressingMode::IndirectX)),
             0xf3 => Some(Instruction(Mnemonic::ISC, AddressingMode::IndirectY)),
+            // LAS
+            0xbb => Some(Instruction(Mnemonic::LAS, AddressingMode::AbsoluteY)),
             _ => None,
         }
     }
 
     #[inline]
+    pub fn profile(self) -> CycleProfile {
+        match self.0 {
+            Mnemonic::ADC
+            | Mnemonic::SBC
+            | Mnemonic::CMP
+            | Mnemonic::CPX
+            | Mnemonic::CPY
+            | Mnemonic::EOR
+            | Mnemonic::LDA
+            | Mnemonic::LDX
+            | Mnemonic::LDY
+            | Mnemonic::LSR
+            | Mnemonic::INX
+            | Mnemonic::INY
+            | Mnemonic::NOP
+            | Mnemonic::ORA
+            | Mnemonic::SEC
+            | Mnemonic::SED
+            | Mnemonic::SEI
+            | Mnemonic::TAX
+            | Mnemonic::TAY
+            | Mnemonic::TSX
+            | Mnemonic::TXA
+            | Mnemonic::TXS
+            | Mnemonic::TYA
+            | Mnemonic::DEX
+            | Mnemonic::DEY
+            | Mnemonic::AND
+            | Mnemonic::BIT
+            | Mnemonic::CLC
+            | Mnemonic::CLD
+            | Mnemonic::CLI
+            | Mnemonic::CLV
+            | Mnemonic::USBC
+            | Mnemonic::ALR
+            | Mnemonic::ANC
+            | Mnemonic::ANC2
+            | Mnemonic::ARR
+            | Mnemonic::LAS => CycleProfile::Read,
+
+            Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => CycleProfile::Write,
+
+            Mnemonic::ASL
+            | Mnemonic::ROL
+            | Mnemonic::ROR
+            | Mnemonic::INC
+            | Mnemonic::DEC
+            | Mnemonic::DCP
+            | Mnemonic::ISC => CycleProfile::ReadWrite,
+
+            Mnemonic::BEQ
+            | Mnemonic::BCS
+            | Mnemonic::BCC
+            | Mnemonic::BMI
+            | Mnemonic::BNE
+            | Mnemonic::BPL
+            | Mnemonic::BVC
+            | Mnemonic::BVS => CycleProfile::Branch,
+
+            Mnemonic::PHP | Mnemonic::PHA => CycleProfile::Push,
+            Mnemonic::PLP | Mnemonic::PLA => CycleProfile::Pull,
+            Mnemonic::RTS | Mnemonic::RTI => CycleProfile::Return,
+
+            Mnemonic::JMP => CycleProfile::JMP,
+            Mnemonic::JSR => CycleProfile::JSR,
+            Mnemonic::BRK => CycleProfile::BRK,
+            Mnemonic::JAM02
+            | Mnemonic::JAM12
+            | Mnemonic::JAM22
+            | Mnemonic::JAM32
+            | Mnemonic::JAM42
+            | Mnemonic::JAM52
+            | Mnemonic::JAM62
+            | Mnemonic::JAM72
+            | Mnemonic::JAM92
+            | Mnemonic::JAMB2
+            | Mnemonic::JAMD2
+            | Mnemonic::JAMF2 => CycleProfile::JAM,
+        }
+    }
+
+    #[inline]
     pub fn cycles(self) -> usize {
-        match self {
-            // read
-            Instruction(
-                Mnemonic::ADC
-                | Mnemonic::SBC
-                | Mnemonic::CPX
-                | Mnemonic::CPY
-                | Mnemonic::CMP
-                | Mnemonic::AND
-                | Mnemonic::EOR
-                | Mnemonic::ORA
-                | Mnemonic::BIT
-                | Mnemonic::STA
-                | Mnemonic::STX
-                | Mnemonic::STY
-                | Mnemonic::LDA
-                | Mnemonic::LDX
-                | Mnemonic::LDY
-                | Mnemonic::TAX
-                | Mnemonic::TAY
-                | Mnemonic::TSX
-                | Mnemonic::TXA
-                | Mnemonic::TXS
-                | Mnemonic::TYA
-                | Mnemonic::BEQ
-                | Mnemonic::BMI
-                | Mnemonic::BCS
-                | Mnemonic::BVS
-                | Mnemonic::BNE
-                | Mnemonic::BCC
-                | Mnemonic::BPL
-                | Mnemonic::BVC
-                | Mnemonic::NOP
-                | Mnemonic::CLC
-                | Mnemonic::CLD
-                | Mnemonic::CLI
-                | Mnemonic::CLV
-                | Mnemonic::SEC
-                | Mnemonic::SED
-                | Mnemonic::SEI
-                | Mnemonic::USBC
-                | Mnemonic::ALR
-                | Mnemonic::ANC
-                | Mnemonic::ANC2
-                | Mnemonic::ARR,
-                addressing_mode,
-            ) => match addressing_mode {
+        match self.profile() {
+            CycleProfile::Read | CycleProfile::Branch => match self.mode() {
                 AddressingMode::Immediate | AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 3,
                 AddressingMode::ZeroPageX
@@ -416,105 +476,96 @@ impl Instruction {
                 AddressingMode::IndirectY => 5,
 
                 _ => panic!(
-                    "Main Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                    "Main Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
                 ),
             },
-            // write | read & write
-            Instruction(
-                Mnemonic::ASL
-                | Mnemonic::LSR
-                | Mnemonic::ROL
-                | Mnemonic::ROR
-                | Mnemonic::INC
-                | Mnemonic::INX
-                | Mnemonic::INY
-                | Mnemonic::DEC
-                | Mnemonic::DEX
-                | Mnemonic::DEY
-                | Mnemonic::DCP
-                | Mnemonic::ISC,
-                addressing_mode,
-            ) => match addressing_mode {
+
+            CycleProfile::Write => match self.mode() {
+                AddressingMode::Immediate | AddressingMode::Implied => 2,
+                AddressingMode::ZeroPage => 3,
+                AddressingMode::ZeroPageX
+                | AddressingMode::ZeroPageY
+                | AddressingMode::Absolute => 4,
+                AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => 5,
+                AddressingMode::IndirectX => 6,
+                AddressingMode::IndirectY => 6,
+
+                _ => panic!(
+                    "Main Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
+                ),
+            },
+
+            CycleProfile::ReadWrite => match self.mode() {
                 AddressingMode::Implied => 2,
                 AddressingMode::ZeroPage => 5,
                 AddressingMode::ZeroPageX | AddressingMode::Absolute => 6,
                 AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => 7,
                 AddressingMode::IndirectX | AddressingMode::IndirectY => 8,
 
-                _ => {
-                    panic!(
-                        "write | read & write Group should not have this addressing mode: {addressing_mode:?}"
-                    )
-                }
+                _ => panic!(
+                    "write | read & write Group should not have this addressing mode: {:?}",
+                    self.mode()
+                ),
             },
-            // JMP
-            Instruction(Mnemonic::JMP, addressing_mode) => match addressing_mode {
+
+            CycleProfile::BRK => match self.mode() {
+                AddressingMode::Implied => 7,
+
+                _ => panic!(
+                    "BRK Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
+                ),
+            },
+
+            CycleProfile::JMP => match self.mode() {
                 AddressingMode::Absolute => 3,
                 AddressingMode::Indirect => 5,
 
                 _ => panic!(
-                    "JMP Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                    "JMP Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
                 ),
             },
-            // JSR
-            Instruction(Mnemonic::JSR, addressing_mode) => match addressing_mode {
+
+            CycleProfile::JSR => match self.mode() {
                 AddressingMode::Absolute => 6,
 
                 _ => panic!(
-                    "JSR Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                    "JSR Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
                 ),
             },
-            // RTS & RTI
-            Instruction(Mnemonic::RTS, addressing_mode)
-            | Instruction(Mnemonic::RTI, addressing_mode) => match addressing_mode {
-                AddressingMode::Implied => 6,
 
-                _ => panic!(
-                    "RTS & RTI Cycle Group should not have this addressing mode: {addressing_mode:?}"
-                ),
-            },
-            // BRK
-            Instruction(Mnemonic::BRK, addressing_mode) => match addressing_mode {
-                AddressingMode::Implied => 7,
-
-                _ => panic!(
-                    "BRK Cycle Group should not have this addressing mode: {addressing_mode:?}"
-                ),
-            },
-            // PHA & PHP
-            Instruction(Mnemonic::PHA, addressing_mode)
-            | Instruction(Mnemonic::PHP, addressing_mode) => match addressing_mode {
-                AddressingMode::Implied => 3,
-
-                _ => panic!(
-                    "PHA & PHP Cycle Group should not have this addressing mode: {addressing_mode:?}"
-                ),
-            },
-            // PLA & PLP
-            Instruction(Mnemonic::PLA, addressing_mode)
-            | Instruction(Mnemonic::PLP, addressing_mode) => match addressing_mode {
+            CycleProfile::Pull => match self.mode() {
                 AddressingMode::Implied => 4,
 
                 _ => panic!(
-                    "PLA & PLP Cycle Group should not have this addressing mode: {addressing_mode:?}"
+                    "PLA & PLP Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
                 ),
             },
-            // JAM
-            Instruction(
-                Mnemonic::JAM02
-                | Mnemonic::JAM12
-                | Mnemonic::JAM22
-                | Mnemonic::JAM32
-                | Mnemonic::JAM42
-                | Mnemonic::JAM52
-                | Mnemonic::JAM62
-                | Mnemonic::JAM72
-                | Mnemonic::JAM92
-                | Mnemonic::JAMB2
-                | Mnemonic::JAMD2
-                | Mnemonic::JAMF2,
-                _,
-            ) => 11,
+
+            CycleProfile::Push => match self.mode() {
+                AddressingMode::Implied => 3,
+
+                _ => panic!(
+                    "PHA & PHP Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
+                ),
+            },
+
+            CycleProfile::Return => match self.mode() {
+                AddressingMode::Implied => 6,
+
+                _ => panic!(
+                    "RTS & RTI Cycle Group should not have this addressing mode: {:?}",
+                    self.mode()
+                ),
+            },
+
+            CycleProfile::JAM => 11,
         }
     }
 
