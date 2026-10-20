@@ -1,5 +1,3 @@
-use crate::instruction::Mnemonic::JAM22;
-
 /// ---
 /// Implied mode is also used for Accumulator mode
 /// ---

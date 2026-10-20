@@ -185,143 +185,28 @@ impl<M: Memory> CPU<M> {
         resolved
     }
 
-    /// return: (address, page cross penalty value)
-    /// TODO: migrate everything to resolve_address
-    #[inline]
-    fn resolve_address_old(&mut self, addressing_mode: AddressingMode) -> (u16, usize) {
-        debug_assert!(
-            !matches!(addressing_mode, AddressingMode::Implied),
-            "invalid AddressingMode given to resolve_address: {addressing_mode:?}"
-        );
-
-        match addressing_mode {
-            AddressingMode::Immediate => (self.pc, 0),
-            AddressingMode::ZeroPage => (self.memory.read_byte(self.pc) as u16, 0),
-            AddressingMode::ZeroPageX | AddressingMode::ZeroPageY => {
-                let addr = self.memory.read_byte(self.pc);
-                let index = match addressing_mode {
-                    AddressingMode::ZeroPageX => self.x,
-                    AddressingMode::ZeroPageY => self.y,
-                    _ => unreachable!(),
-                };
-                (addr.wrapping_add(index) as u16, 0)
-            }
-            AddressingMode::Absolute => (self.memory.read_word(self.pc), 0),
-            AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
-                let addr = self.memory.read_word(self.pc);
-                let index = match addressing_mode {
-                    AddressingMode::AbsoluteX => self.x,
-                    AddressingMode::AbsoluteY => self.y,
-                    _ => unreachable!(),
-                };
-                let addr_indexed = addr.wrapping_add(index as u16);
-                let penalty = if addr & 0xFF00 != addr_indexed & 0xFF00 {
-                    1
-                } else {
-                    0
-                };
-
-                (addr_indexed, penalty)
-            }
-            AddressingMode::IndirectX => {
-                let zp_addr_lo = self.memory.read_byte(self.pc).wrapping_add(self.x);
-                let zp_addr_hi = zp_addr_lo.wrapping_add(1);
-                let addr_lo = self.memory.read_byte(zp_addr_lo as u16);
-                let addr_hi = self.memory.read_byte(zp_addr_hi as u16);
-                ((addr_hi as u16) << 8 | addr_lo as u16, 0)
-            }
-            AddressingMode::IndirectY => {
-                let zp_addr_lo = self.memory.read_byte(self.pc);
-                let zp_addr_hi = zp_addr_lo.wrapping_add(1);
-                let addr_lo = self.memory.read_byte(zp_addr_lo as u16);
-                let addr_hi = self.memory.read_byte(zp_addr_hi as u16);
-                let addr = ((addr_hi as u16) << 8) | (addr_lo as u16);
-                let addr_indexed = addr.wrapping_add(self.y as u16);
-                let penalty = if addr & 0xFF00 != addr_indexed & 0xFF00 {
-                    1
-                } else {
-                    0
-                };
-
-                (addr_indexed, penalty)
-            }
-            AddressingMode::Indirect => {
-                let lookup_lo = self.memory.read_byte(self.pc);
-                let lookup_hi = self.memory.read_byte(self.pc.wrapping_add(1));
-
-                let lookup_addr_1 = (lookup_hi as u16) << 8 | lookup_lo as u16;
-                let lookup_addr_2 = (lookup_hi as u16) << 8 | lookup_lo.wrapping_add(1) as u16;
-
-                let addr_lo = self.memory.read_byte(lookup_addr_1);
-                let addr_hi = self.memory.read_byte(lookup_addr_2);
-                let addr = ((addr_hi as u16) << 8) | addr_lo as u16;
-
-                (addr, 0)
-            }
-            AddressingMode::Implied => unreachable!(),
-        }
-    }
-
     /// return: (value, page cross penalty value)
     #[inline]
-    pub fn fetch(&mut self, addressing_mode: AddressingMode) -> (u8, usize) {
+    pub fn fetch(&mut self, addressing_mode: AddressingMode) -> u8 {
         debug_assert!(
             !matches!(addressing_mode, AddressingMode::Implied),
             "invalid AddressingMode given to fetch: {addressing_mode:?}"
         );
 
-        let (addr, penalty) = self.resolve_address_old(addressing_mode);
-        match addressing_mode {
-            AddressingMode::Immediate
-            | AddressingMode::ZeroPage
-            | AddressingMode::ZeroPageX
-            | AddressingMode::ZeroPageY
-            | AddressingMode::IndirectX
-            | AddressingMode::IndirectY => self.pc = self.pc.wrapping_add(1),
-            AddressingMode::Absolute
-            | AddressingMode::AbsoluteX
-            | AddressingMode::AbsoluteY
-            | AddressingMode::Indirect => self.pc = self.pc.wrapping_add(2),
-            AddressingMode::Implied => unreachable!(),
-        };
-        (self.memory.read_byte(addr), penalty)
+        let ResolvedAddress { addr, .. } = self.resolve_address(addressing_mode);
+        self.memory.read_byte(addr)
     }
 
     /// return: penalty
     #[inline]
-    pub fn write(&mut self, addressing_mode: AddressingMode, byte: u8) -> usize {
+    pub fn write(&mut self, addressing_mode: AddressingMode, byte: u8) {
         debug_assert!(
             !matches!(addressing_mode, AddressingMode::Implied),
             "invalid AddressingMode given to write: {addressing_mode:?}"
         );
 
-        let (addr, _) = self.resolve_address_old(addressing_mode);
-        match addressing_mode {
-            AddressingMode::Immediate
-            | AddressingMode::ZeroPage
-            | AddressingMode::ZeroPageX
-            | AddressingMode::ZeroPageY
-            | AddressingMode::IndirectX
-            | AddressingMode::IndirectY => self.pc = self.pc.wrapping_add(1),
-            AddressingMode::Absolute
-            | AddressingMode::AbsoluteX
-            | AddressingMode::AbsoluteY
-            | AddressingMode::Indirect => self.pc = self.pc.wrapping_add(2),
-            AddressingMode::Implied => unreachable!(),
-        };
+        let ResolvedAddress { addr, .. } = self.resolve_address(addressing_mode);
         self.memory.write_byte(addr, byte);
-
-        // penalty always taken when one is possible
-        match addressing_mode {
-            AddressingMode::Immediate
-            | AddressingMode::ZeroPage
-            | AddressingMode::ZeroPageX
-            | AddressingMode::ZeroPageY
-            | AddressingMode::Absolute
-            | AddressingMode::IndirectX => 0,
-            AddressingMode::AbsoluteY | AddressingMode::AbsoluteX | AddressingMode::IndirectY => 1,
-            AddressingMode::Implied | AddressingMode::Indirect => unreachable!(),
-        }
     }
 
     pub fn step(&mut self) -> Result<()> {
@@ -543,7 +428,7 @@ impl<M: Memory> CPU<M> {
                         };
 
                         if branch_taken {
-                            let offset = self.fetch(instruction.mode()).0 as i8 as i16 as u16;
+                            let offset = self.fetch(instruction.mode()) as i8 as i16 as u16;
                             let pc_target = self.pc.wrapping_add(offset);
 
                             let cycles = if pc_target & 0xff00 == self.pc & 0xff00 {
