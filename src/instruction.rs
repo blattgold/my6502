@@ -119,6 +119,8 @@ pub enum Mnemonic {
     ARR,
     // DCP
     DCP,
+    // ISC,
+    ISC,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -342,6 +344,14 @@ impl Instruction {
             0xdb => Some(Instruction(Mnemonic::DCP, AddressingMode::AbsoluteY)),
             0xc3 => Some(Instruction(Mnemonic::DCP, AddressingMode::IndirectX)),
             0xd3 => Some(Instruction(Mnemonic::DCP, AddressingMode::IndirectY)),
+            // ISC
+            0xe7 => Some(Instruction(Mnemonic::ISC, AddressingMode::ZeroPage)),
+            0xf7 => Some(Instruction(Mnemonic::ISC, AddressingMode::ZeroPageX)),
+            0xef => Some(Instruction(Mnemonic::ISC, AddressingMode::Absolute)),
+            0xff => Some(Instruction(Mnemonic::ISC, AddressingMode::AbsoluteX)),
+            0xfb => Some(Instruction(Mnemonic::ISC, AddressingMode::AbsoluteY)),
+            0xe3 => Some(Instruction(Mnemonic::ISC, AddressingMode::IndirectX)),
+            0xf3 => Some(Instruction(Mnemonic::ISC, AddressingMode::IndirectY)),
             _ => None,
         }
     }
@@ -421,7 +431,8 @@ impl Instruction {
                 | Mnemonic::DEC
                 | Mnemonic::DEX
                 | Mnemonic::DEY
-                | Mnemonic::DCP,
+                | Mnemonic::DCP
+                | Mnemonic::ISC,
                 addressing_mode,
             ) => match addressing_mode {
                 AddressingMode::Implied => 2,

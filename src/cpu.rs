@@ -22,6 +22,12 @@ pub const IRQ_VECTOR_HI: u16 = 0xffff;
 
 pub const STACK_OFFSET: u16 = 256 * 1;
 
+pub struct ResolvedAddress {
+    addr: u16,
+    bytes_read: u16,
+    penalty: usize,
+}
+
 /// the state is set to JAM if one of the JAM opcodes is run.
 pub enum CPUState {
     Reset,
@@ -63,9 +69,126 @@ impl<M: Memory> CPU<M> {
         }
     }
 
+    /// returns the resolved address, as well as cycle penalty.
+    /// the penalty should only be applied to instructions which only read from memory once and don't write
+    #[inline(always)]
+    fn resolve_address(&mut self, addressing_mode: AddressingMode) -> ResolvedAddress {
+        debug_assert!(
+            !matches!(addressing_mode, AddressingMode::Implied),
+            "invalid AddressingMode given to resolve_address: {addressing_mode:?}"
+        );
+
+        let resolved = match addressing_mode {
+            AddressingMode::Immediate => ResolvedAddress {
+                addr: self.pc,
+                bytes_read: 1,
+                penalty: 0,
+            },
+            AddressingMode::ZeroPage => ResolvedAddress {
+                addr: self.memory.read_byte(self.pc) as u16,
+                bytes_read: 1,
+                penalty: 0,
+            },
+            AddressingMode::ZeroPageX | AddressingMode::ZeroPageY => {
+                let addr = self.memory.read_byte(self.pc);
+                let index = match addressing_mode {
+                    AddressingMode::ZeroPageX => self.x,
+                    AddressingMode::ZeroPageY => self.y,
+                    _ => unreachable!(),
+                };
+
+                ResolvedAddress {
+                    addr: addr.wrapping_add(index) as u16,
+                    bytes_read: 1,
+                    penalty: 0,
+                }
+            }
+            AddressingMode::Absolute => ResolvedAddress {
+                addr: self.memory.read_word(self.pc),
+                bytes_read: 2,
+                penalty: 0,
+            },
+            AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
+                let addr = self.memory.read_word(self.pc);
+                let index = match addressing_mode {
+                    AddressingMode::AbsoluteX => self.x,
+                    AddressingMode::AbsoluteY => self.y,
+                    _ => unreachable!(),
+                };
+                let addr_indexed = addr.wrapping_add(index as u16);
+                let penalty = if addr & 0xFF00 != addr_indexed & 0xFF00 {
+                    1
+                } else {
+                    0
+                };
+
+                ResolvedAddress {
+                    addr: addr_indexed,
+                    bytes_read: 2,
+                    penalty,
+                }
+            }
+            AddressingMode::IndirectX => {
+                let zp_addr_lo = self.memory.read_byte(self.pc).wrapping_add(self.x);
+                let zp_addr_hi = zp_addr_lo.wrapping_add(1);
+                let addr_lo = self.memory.read_byte(zp_addr_lo as u16);
+                let addr_hi = self.memory.read_byte(zp_addr_hi as u16);
+                let addr = (addr_hi as u16) << 8 | addr_lo as u16;
+
+                ResolvedAddress {
+                    addr,
+                    bytes_read: 1,
+                    penalty: 0,
+                }
+            }
+            AddressingMode::IndirectY => {
+                let zp_addr_lo = self.memory.read_byte(self.pc);
+                let zp_addr_hi = zp_addr_lo.wrapping_add(1);
+                let addr_lo = self.memory.read_byte(zp_addr_lo as u16);
+                let addr_hi = self.memory.read_byte(zp_addr_hi as u16);
+                let addr = ((addr_hi as u16) << 8) | (addr_lo as u16);
+                let addr_indexed = addr.wrapping_add(self.y as u16);
+                let penalty = if addr & 0xFF00 != addr_indexed & 0xFF00 {
+                    1
+                } else {
+                    0
+                };
+
+                ResolvedAddress {
+                    addr: addr_indexed,
+                    bytes_read: 1,
+                    penalty,
+                }
+            }
+            AddressingMode::Indirect => {
+                let lookup_lo = self.memory.read_byte(self.pc);
+                let lookup_hi = self.memory.read_byte(self.pc.wrapping_add(1));
+
+                let lookup_addr_1 = (lookup_hi as u16) << 8 | lookup_lo as u16;
+                let lookup_addr_2 = (lookup_hi as u16) << 8 | lookup_lo.wrapping_add(1) as u16;
+
+                let addr_lo = self.memory.read_byte(lookup_addr_1);
+                let addr_hi = self.memory.read_byte(lookup_addr_2);
+                let addr = ((addr_hi as u16) << 8) | addr_lo as u16;
+
+                ResolvedAddress {
+                    addr,
+                    bytes_read: 2,
+                    penalty: 0,
+                }
+            }
+            AddressingMode::Implied => unreachable!(),
+        };
+
+        self.pc = self.pc.wrapping_add(resolved.bytes_read);
+
+        resolved
+    }
+
     /// return: (address, page cross penalty value)
+    /// TODO: migrate everything to resolve_address
     #[inline]
-    fn resolve_address(&mut self, addressing_mode: AddressingMode) -> (u16, usize) {
+    fn resolve_address_old(&mut self, addressing_mode: AddressingMode) -> (u16, usize) {
         debug_assert!(
             !matches!(addressing_mode, AddressingMode::Implied),
             "invalid AddressingMode given to resolve_address: {addressing_mode:?}"
@@ -147,7 +270,7 @@ impl<M: Memory> CPU<M> {
             "invalid AddressingMode given to fetch: {addressing_mode:?}"
         );
 
-        let (addr, penalty) = self.resolve_address(addressing_mode);
+        let (addr, penalty) = self.resolve_address_old(addressing_mode);
         match addressing_mode {
             AddressingMode::Immediate
             | AddressingMode::ZeroPage
@@ -172,7 +295,7 @@ impl<M: Memory> CPU<M> {
             "invalid AddressingMode given to write: {addressing_mode:?}"
         );
 
-        let (addr, _) = self.resolve_address(addressing_mode);
+        let (addr, _) = self.resolve_address_old(addressing_mode);
         match addressing_mode {
             AddressingMode::Immediate
             | AddressingMode::ZeroPage
@@ -282,7 +405,12 @@ impl<M: Memory> CPU<M> {
             Mnemonic::JSR => self.jsr(instruction),
             Mnemonic::RTS => self.rts(instruction),
             Mnemonic::NOP => self.nop(instruction),
-            Mnemonic::INC => self.inc(instruction),
+            Mnemonic::INC => {
+                let ResolvedAddress { addr, .. } = self.resolve_address(instruction.mode());
+
+                self.inc_part(addr);
+                instruction.cycles()
+            }
             Mnemonic::INX => self.inx(instruction),
             Mnemonic::INY => self.iny(instruction),
             Mnemonic::DEC => self.dec(instruction),
@@ -299,6 +427,20 @@ impl<M: Memory> CPU<M> {
             Mnemonic::RTI => self.rti(instruction),
             Mnemonic::PHA | Mnemonic::PHP => self.push_op(instruction),
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
+            Mnemonic::ISC => {
+                let ResolvedAddress { addr, .. } = self.resolve_address(instruction.mode());
+
+                self.inc_part(addr);
+                let operand_2 = self.memory.read_byte(addr);
+
+                if self.flag_get_decimal() {
+                    self.sbc_decimal_part(operand_2);
+                } else {
+                    self.arithmetic_binary_part(!operand_2);
+                }
+
+                instruction.cycles()
+            }
 
             // -- undocumented --
             Mnemonic::ALR => self.alr(instruction),
@@ -612,7 +754,7 @@ impl<M: Memory> CPU<M> {
             | AddressingMode::ZeroPageX
             | AddressingMode::Absolute
             | AddressingMode::AbsoluteX => {
-                let addr = self.resolve_address(instruction.mode()).0;
+                let addr = self.resolve_address_old(instruction.mode()).0;
                 self.memory.read_byte(addr)
             }
             _ => unreachable!(),
@@ -712,7 +854,7 @@ impl<M: Memory> CPU<M> {
             "Invalid Instruction given to jmp: {instruction:?}"
         );
 
-        self.pc = self.resolve_address(instruction.mode()).0;
+        self.pc = self.resolve_address_old(instruction.mode()).0;
         instruction.cycles()
     }
 
@@ -764,20 +906,28 @@ impl<M: Memory> CPU<M> {
         2
     }
 
-    #[inline]
+    #[inline(always)]
     fn inc(&mut self, instruction: Instruction) -> usize {
         debug_assert!(
             matches!(instruction.mnemonic(), Mnemonic::INC),
             "Invalid Instruction given to inc: {instruction:?}"
         );
 
-        let addr = self.resolve_address(instruction.mode()).0;
+        let addr = self.resolve_address_old(instruction.mode()).0;
         let result = self.memory.read_byte(addr).wrapping_add(1);
         self.flag_set_negative(result);
         self.flag_set_zero(result);
         self.write(instruction.mode(), result);
 
         instruction.cycles()
+    }
+
+    #[inline(always)]
+    fn inc_part(&mut self, addr: u16) {
+        let result = self.memory.read_byte(addr).wrapping_add(1);
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.memory.write_byte(addr, result);
     }
 
     #[inline]
@@ -829,7 +979,7 @@ impl<M: Memory> CPU<M> {
             "Invalid Instruction given to dec: {instruction:?}"
         );
 
-        let addr = self.resolve_address(instruction.mode()).0;
+        let addr = self.resolve_address_old(instruction.mode()).0;
         let result = self.memory.read_byte(addr).wrapping_add(255);
         self.flag_set_negative(result);
         self.flag_set_zero(result);
@@ -1072,7 +1222,7 @@ impl<M: Memory> CPU<M> {
         );
 
         let byte = {
-            let addr = self.resolve_address(instruction.mode()).0;
+            let addr = self.resolve_address_old(instruction.mode()).0;
             self.memory.read_byte(addr)
         };
 
