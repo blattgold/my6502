@@ -391,7 +391,6 @@ impl Instruction {
             | Mnemonic::LDA
             | Mnemonic::LDX
             | Mnemonic::LDY
-            | Mnemonic::LSR
             | Mnemonic::INX
             | Mnemonic::INY
             | Mnemonic::NOP
@@ -428,6 +427,7 @@ impl Instruction {
             | Mnemonic::INC
             | Mnemonic::DEC
             | Mnemonic::DCP
+            | Mnemonic::LSR
             | Mnemonic::ISC => CycleProfile::ReadWrite,
 
             Mnemonic::BEQ
