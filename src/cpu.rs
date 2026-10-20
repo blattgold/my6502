@@ -236,7 +236,26 @@ impl<M: Memory> CPU<M> {
     #[inline]
     fn exec(&mut self, instruction: Instruction) -> usize {
         match instruction.mnemonic() {
-            Mnemonic::ADC | Mnemonic::SBC => self.arithmetic(instruction),
+            Mnemonic::ADC => {
+                let (operand_2, penalty) = self.fetch(instruction.mode());
+                if self.flag_get_decimal() {
+                    self.adc_decimal_part(operand_2);
+                } else {
+                    self.arithmetic_binary_part(operand_2);
+                }
+
+                instruction.cycles() + penalty
+            }
+            Mnemonic::SBC | Mnemonic::USBC => {
+                let (operand_2, penalty) = self.fetch(instruction.mode());
+                if self.flag_get_decimal() {
+                    self.sbc_decimal_part(operand_2);
+                } else {
+                    self.arithmetic_binary_part(!operand_2);
+                }
+
+                instruction.cycles() + penalty
+            }
             Mnemonic::CPX | Mnemonic::CPY | Mnemonic::CMP => self.compare(instruction),
             Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => self.logic(instruction),
             Mnemonic::BIT => self.bit(instruction),
@@ -282,7 +301,6 @@ impl<M: Memory> CPU<M> {
             Mnemonic::PLA | Mnemonic::PLP => self.pull_op(instruction),
 
             // -- undocumented --
-            Mnemonic::USBC => self.arithmetic(instruction),
             Mnemonic::ALR => self.alr(instruction),
             Mnemonic::ANC | Mnemonic::ANC2 => self.anc(instruction),
             Mnemonic::ARR => self.arr(instruction),
@@ -306,48 +324,21 @@ impl<M: Memory> CPU<M> {
         }
     }
 
-    /// return: cycles taken
-    #[inline]
-    fn arithmetic(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::ADC | Mnemonic::SBC | Mnemonic::USBC
-            ),
-            "Invalid Instruction given to adc: {instruction:?}",
-        );
-
-        if self.flag_get_decimal() {
-            if instruction.mnemonic() == Mnemonic::ADC {
-                self.adc_decimal(instruction)
-            } else {
-                self.sbc_decimal(instruction)
-            }
-        } else {
-            self.arithmetic_binary(instruction)
-        }
-    }
-
-    #[inline]
-    fn arithmetic_binary(&mut self, instruction: Instruction) -> usize {
-        let subtract = matches!(instruction.mnemonic(), Mnemonic::SBC | Mnemonic::USBC);
-
-        let a = self.a;
-        let (b, penalty) = self.fetch(instruction.mode());
-        let b = if subtract { !b } else { b };
+    /// operand_1 is always A
+    #[inline(always)]
+    fn arithmetic_binary_part(&mut self, operand_2: u8) {
+        let operand_1 = self.a;
         let carry_in = self.flag_get_carry() as u8;
 
-        let sum = a.wrapping_add(b).wrapping_add(carry_in);
-        let carry_out = sum < a || b.wrapping_add(carry_in) < b;
+        let sum = operand_1.wrapping_add(operand_2).wrapping_add(carry_in);
+        let carry_out = sum < operand_1 || operand_2.wrapping_add(carry_in) < operand_2;
 
         self.a = sum;
 
         self.flag_set_zero(sum);
         self.flag_set_negative(sum);
         self.flag_set_carry(carry_out);
-        self.flag_set_overflow(a, b, sum);
-
-        penalty + instruction.cycles()
+        self.flag_set_overflow(operand_1, operand_2, sum);
     }
 
     /// BCD MODE
@@ -356,16 +347,17 @@ impl<M: Memory> CPU<M> {
     /// - *Z* is set based on the binary sum.
     /// - *C* is set based on the BCD carry.
     /// - *N* and *V* are set based on an intermediate sum, where the high nibble has not been decimal adjusted.
-    #[inline]
-    fn adc_decimal(&mut self, instruction: Instruction) -> usize {
-        let a = self.a;
-        let (b, penalty) = self.fetch(instruction.mode());
+    #[inline(always)]
+    fn adc_decimal_part(&mut self, operand_2: u8) {
+        let operand_1 = self.a;
 
         let carry_in = self.flag_get_carry() as u8;
 
-        let binary_sum = a.wrapping_add(b).wrapping_add(carry_in);
+        let binary_sum = operand_1.wrapping_add(operand_2).wrapping_add(carry_in);
 
-        let lo = (a & 0x0f).wrapping_add(b & 0x0f).wrapping_add(carry_in);
+        let lo = (operand_1 & 0x0f)
+            .wrapping_add(operand_2 & 0x0f)
+            .wrapping_add(carry_in);
 
         let (lo_adjusted, lo_carry) = if lo > 0x09 {
             let adjusted = lo.wrapping_add(6);
@@ -376,10 +368,12 @@ impl<M: Memory> CPU<M> {
 
         // overflow and negative are calculated using this intermediate sum on the NMOS 6502.
         // this is a quirk of the original hardware.
-        let decimal_intermediate_sum = (a & 0xf0).wrapping_add(b & 0xf0).wrapping_add(lo_adjusted);
+        let decimal_intermediate_sum = (operand_1 & 0xf0)
+            .wrapping_add(operand_2 & 0xf0)
+            .wrapping_add(lo_adjusted);
 
-        let hi = ((a >> 4) & 0x0f)
-            .wrapping_add(b >> 4)
+        let hi = ((operand_1 >> 4) & 0x0f)
+            .wrapping_add(operand_2 >> 4)
             .wrapping_add(lo_carry);
 
         let (hi_adjusted, carry_out) = if hi > 0x09 {
@@ -393,29 +387,28 @@ impl<M: Memory> CPU<M> {
 
         self.flag_set_zero(binary_sum);
         self.flag_set_carry(carry_out);
-        self.flag_set_overflow(a, b, decimal_intermediate_sum);
+        self.flag_set_overflow(operand_1, operand_2, decimal_intermediate_sum);
         self.flag_set_negative(decimal_intermediate_sum);
-
-        penalty + instruction.cycles()
     }
 
     /// BCD MODE
     /// ---
     /// - *Z*, *N* and *V* are set based on the binary sum.
     /// - *C* is set based on the BCD borrow.
-    #[inline]
-    fn sbc_decimal(&mut self, instruction: Instruction) -> usize {
-        let a = self.a;
-        let (b, penalty) = self.fetch(instruction.mode());
+    #[inline(always)]
+    fn sbc_decimal_part(&mut self, operand_2: u8) {
+        let operand_1 = self.a;
 
         let carry_in = self.flag_get_carry() as u8;
 
-        let binary_sum = a.wrapping_add(!b).wrapping_add(carry_in);
+        let binary_sum = operand_1.wrapping_add(!operand_2).wrapping_add(carry_in);
 
-        let lo = (a & 0x0f).wrapping_add(!b & 0x0f).wrapping_add(carry_in);
+        let lo = (operand_1 & 0x0f)
+            .wrapping_add(!operand_2 & 0x0f)
+            .wrapping_add(carry_in);
 
         let borrow_in = (carry_in == 0) as u8;
-        let lo_borrow = (a & 0x0f) < (b & 0x0f).wrapping_add(borrow_in);
+        let lo_borrow = (operand_1 & 0x0f) < (operand_2 & 0x0f).wrapping_add(borrow_in);
 
         let (lo_adjusted, lo_carry) = if lo_borrow {
             let adjusted = lo.wrapping_add(10);
@@ -426,7 +419,8 @@ impl<M: Memory> CPU<M> {
 
         let hi = binary_sum >> 4;
 
-        let hi_borrow = ((a >> 4) & 0x0f) < ((b >> 4) & 0x0f).wrapping_add(lo_carry);
+        let hi_borrow =
+            ((operand_1 >> 4) & 0x0f) < ((operand_2 >> 4) & 0x0f).wrapping_add(lo_carry);
 
         let (hi_adjusted, carry_out) = if hi_borrow {
             let adjusted = hi.wrapping_add(10);
@@ -440,10 +434,8 @@ impl<M: Memory> CPU<M> {
 
         self.flag_set_zero(binary_sum);
         self.flag_set_carry(!carry_out);
-        self.flag_set_overflow(a, !b, binary_sum);
+        self.flag_set_overflow(operand_1, !operand_2, binary_sum);
         self.flag_set_negative(binary_sum);
-
-        penalty + instruction.cycles()
     }
 
     #[inline]
