@@ -433,6 +433,12 @@ impl<M: Memory> CPU<M> {
                         self.sr = (sr & !FLAG_BRK) | FLAG_IGN;
                         self.pc = ((return_hi as u16) << 8) | (return_lo as u16);
                     }
+                    Mnemonic::RTS => {
+                        let pc_lo = self.pop_stack();
+                        let pc_hi = self.pop_stack();
+
+                        self.pc = (((pc_hi as u16) << 8) | (pc_lo as u16)).wrapping_add(1);
+                    }
                     Mnemonic::CLC => self.sr &= !FLAG_CRY,
                     Mnemonic::CLD => self.sr &= !FLAG_DEC,
                     Mnemonic::CLI => self.sr &= !FLAG_INT,
@@ -998,32 +1004,6 @@ impl<M: Memory> CPU<M> {
         );
 
         self.pc = self.resolve_address_old(instruction.mode()).0;
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn jsr(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::JSR),
-            "Invalid Instruction given to jsr: {instruction:?}"
-        );
-
-        let target_lo = self.memory.read_byte(self.pc) as u16;
-        self.pc = self.pc.wrapping_add(1);
-
-        let return_addr = self.pc;
-
-        let return_addr_hi = (return_addr >> 8) as u8;
-        self.memory.write_byte(self.sp_addr(), return_addr_hi);
-        self.sp = self.sp.wrapping_add(255);
-
-        let return_addr_lo = return_addr as u8;
-        self.memory.write_byte(self.sp_addr(), return_addr_lo);
-        self.sp = self.sp.wrapping_add(255);
-
-        let target_hi = self.memory.read_byte(self.pc) as u16;
-        self.pc = (target_hi << 8) | target_lo;
-
         instruction.cycles()
     }
 
