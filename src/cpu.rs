@@ -636,7 +636,16 @@ impl<M: Memory> CPU<M> {
                                 }
                             }
                             Mnemonic::SAX => self.memory.write_byte(addr, self.a & self.x),
+                            Mnemonic::SBX => {
+                                let operand = self.memory.read_byte(addr);
+                                let ax = self.a & self.x;
+                                let result = ax.wrapping_sub(operand);
+                                self.x = result;
 
+                                self.flag_set_zero(result);
+                                self.flag_set_negative(result);
+                                self.flag_set_carry(operand < ax || ax == operand);
+                            }
                             Mnemonic::LXA | Mnemonic::ANE => {}
                             _ => todo!(),
                         }
