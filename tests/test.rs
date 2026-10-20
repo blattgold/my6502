@@ -399,3 +399,8 @@ fn test_opcode(opcode: u8) -> Result<()> {
         Ok(())
     }
 }
+
+/// this only exists to ensure that the opcode doesn't panic
+#[test_case(0x6b ; "0x6b ARR imm")]
+#[test_case(0x8b ; "0x8b ANE imm")]
+fn test_opcode_dummy(_: u8) {}
