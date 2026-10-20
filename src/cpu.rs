@@ -366,6 +366,21 @@ impl<M: Memory> CPU<M> {
                         self.flag_set_negative(self.x);
                         self.flag_set_zero(self.x);
                     }
+                    Mnemonic::INY => {
+                        self.y = self.y.wrapping_add(1);
+                        self.flag_set_negative(self.y);
+                        self.flag_set_zero(self.y);
+                    }
+                    Mnemonic::DEX => {
+                        self.x = self.x.wrapping_add(255);
+                        self.flag_set_negative(self.x);
+                        self.flag_set_zero(self.x);
+                    }
+                    Mnemonic::DEY => {
+                        self.y = self.y.wrapping_add(255);
+                        self.flag_set_negative(self.y);
+                        self.flag_set_zero(self.y);
+                    }
                     Mnemonic::TXS => self.sp = self.x,
                     Mnemonic::TAY => {
                         self.y = self.a;
@@ -489,6 +504,8 @@ impl<M: Memory> CPU<M> {
                             self.resolve_address(instruction.mode());
 
                         match instruction.mnemonic() {
+                            Mnemonic::INC => self.inc_part(addr),
+                            Mnemonic::DEC => self.dec_part(addr),
                             Mnemonic::ADC => {
                                 if self.flag_get_decimal() {
                                     self.adc_decimal_part(addr);
@@ -996,34 +1013,6 @@ impl<M: Memory> CPU<M> {
         }
     }
 
-    #[inline]
-    fn jmp(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::JMP),
-            "Invalid Instruction given to jmp: {instruction:?}"
-        );
-
-        self.pc = self.resolve_address_old(instruction.mode()).0;
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn rts(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::RTS),
-            "Invalid Instruction given to rts: {instruction:?}"
-        );
-
-        self.sp = self.sp.wrapping_add(1);
-        let pc_lo = self.memory.read_byte(self.sp_addr());
-
-        self.sp = self.sp.wrapping_add(1);
-        let pc_hi = self.memory.read_byte(self.sp_addr());
-
-        self.pc = (((pc_hi as u16) << 8) | (pc_lo as u16)).wrapping_add(1);
-        instruction.cycles()
-    }
-
     #[inline(always)]
     fn inc_part(&mut self, addr: u16) {
         let result = self.memory.read_byte(addr).wrapping_add(1);
@@ -1032,46 +1021,12 @@ impl<M: Memory> CPU<M> {
         self.memory.write_byte(addr, result);
     }
 
-    #[inline]
-    fn inx(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::INX),
-            "Invalid Instruction given to inx: {instruction:?}"
-        );
-
-        debug_assert!(
-            matches!(instruction.mode(), AddressingMode::Implied),
-            "Invalid Mode for INX: {:?}",
-            instruction.mode()
-        );
-
-        let result = self.x.wrapping_add(1);
+    #[inline(always)]
+    fn dec_part(&mut self, addr: u16) {
+        let result = self.memory.read_byte(addr).wrapping_add(255);
         self.flag_set_negative(result);
         self.flag_set_zero(result);
-        self.x = result;
-
-        instruction.cycles()
-    }
-
-    #[inline]
-    fn iny(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::INY),
-            "Invalid Instruction given to iny: {instruction:?}"
-        );
-
-        debug_assert!(
-            matches!(instruction.mode(), AddressingMode::Implied),
-            "Invalid Mode for INY: {:?}",
-            instruction.mode()
-        );
-
-        let result = self.y.wrapping_add(1);
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.y = result;
-
-        instruction.cycles()
+        self.memory.write_byte(addr, result);
     }
 
     #[inline]
