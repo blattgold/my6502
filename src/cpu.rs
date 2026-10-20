@@ -406,6 +406,13 @@ impl<M: Memory> CPU<M> {
                         self.flag_set_negative(self.a);
                         self.flag_set_carry(carry);
                     }
+                    Mnemonic::ROL => {
+                        let carry = self.a & 0b1000_0000 != 0;
+                        self.a = (self.a << 1) | if self.flag_get_carry() { 1 } else { 0 };
+                        self.flag_set_zero(self.a);
+                        self.flag_set_negative(self.a);
+                        self.flag_set_carry(carry);
+                    }
                     _ => todo!(),
                 };
 
@@ -488,6 +495,9 @@ impl<M: Memory> CPU<M> {
                     }
                     Mnemonic::LSR => {
                         self.lsr_mem_part(addr);
+                    }
+                    Mnemonic::ROL => {
+                        self.rol_mem_part(addr);
                     }
 
                     _ => todo!(),
@@ -960,6 +970,17 @@ impl<M: Memory> CPU<M> {
         let operand = self.memory.read_byte(addr);
         let result = operand >> 1;
         let carry = operand & 0b0000_0001 != 0;
+        self.flag_set_negative(result);
+        self.flag_set_zero(result);
+        self.flag_set_carry(carry);
+        self.memory.write_byte(addr, result);
+    }
+
+    #[inline(always)]
+    fn rol_mem_part(&mut self, addr: u16) {
+        let operand = self.memory.read_byte(addr);
+        let result = (operand << 1) | if self.flag_get_carry() { 1 } else { 0 };
+        let carry = operand & 0b1000_0000 != 0;
         self.flag_set_negative(result);
         self.flag_set_zero(result);
         self.flag_set_carry(carry);
