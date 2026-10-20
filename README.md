@@ -9,3 +9,9 @@ https://forums.atariage.com/applications/core/interface/file/attachment.php?id=1
 ## Opcodes
 
 https://www.masswerk.at/6502/6502_instruction_set.html
+
+
+## testing
+
+the tests in ./tests rely on json files which must first be downloaded.
+run `./setup_tests.sh` to download them first.

@@ -291,7 +291,7 @@ use my6502::{cpu::CPU, memory::Memory};
 fn test_opcode(opcode: u8) -> Result<()> {
     let verbose_output: bool = std::env::var("TEST_6502_VERBOSE").is_ok();
 
-    let test_file_path = PathBuf::from(format!("tests/json/v1/{opcode:02x?}.json"));
+    let test_file_path = PathBuf::from(format!("tests/json/{opcode:02x?}.json"));
     let file_string = read_to_string(test_file_path)?;
     let tests: Vec<TestCase> = serde_json::from_str(&file_string)?;
 
