@@ -425,6 +425,26 @@ impl<M: Memory> CPU<M> {
                         self.flag_set_negative(self.a);
                         self.flag_set_carry(carry);
                     }
+                    Mnemonic::CLC => self.sr &= !FLAG_CRY,
+                    Mnemonic::CLD => self.sr &= !FLAG_DEC,
+                    Mnemonic::CLI => self.sr &= !FLAG_INT,
+                    Mnemonic::CLV => self.sr &= !FLAG_OVF,
+                    Mnemonic::SEC => self.sr |= FLAG_CRY,
+                    Mnemonic::SED => self.sr |= FLAG_DEC,
+                    Mnemonic::SEI => self.sr |= FLAG_INT,
+                    Mnemonic::NOP => {}
+                    Mnemonic::JAM02
+                    | Mnemonic::JAM12
+                    | Mnemonic::JAM22
+                    | Mnemonic::JAM32
+                    | Mnemonic::JAM42
+                    | Mnemonic::JAM52
+                    | Mnemonic::JAM62
+                    | Mnemonic::JAM72
+                    | Mnemonic::JAM92
+                    | Mnemonic::JAMB2
+                    | Mnemonic::JAMD2
+                    | Mnemonic::JAMF2 => self.state = CPUState::Jam,
                     _ => todo!(),
                 };
 
@@ -513,6 +533,15 @@ impl<M: Memory> CPU<M> {
                     }
                     Mnemonic::ROR => {
                         self.ror_mem_part(addr);
+                    }
+                    Mnemonic::ISC => {
+                        self.inc_part(addr);
+
+                        if self.flag_get_decimal() {
+                            self.sbc_decimal_part(addr);
+                        } else {
+                            self.arithmetic_binary_part(addr, true);
+                        }
                     }
 
                     _ => todo!(),
@@ -810,77 +839,6 @@ impl<M: Memory> CPU<M> {
         self.flag_set_negative(binary_sum);
     }
 
-    #[inline]
-    fn compare(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            instruction.mnemonic() == Mnemonic::CPX
-                || instruction.mnemonic() == Mnemonic::CPY
-                || instruction.mnemonic() == Mnemonic::CMP,
-            "Invalid Instruction given to compare: {instruction:?}",
-        );
-
-        let operand_1 = match instruction.mnemonic() {
-            Mnemonic::CPX => self.x,
-            Mnemonic::CPY => self.y,
-            Mnemonic::CMP => self.a,
-            _ => unreachable!(),
-        };
-        let (operand_2, penalty) = self.fetch(instruction.mode());
-        let operand_2 = !operand_2;
-
-        let operand_2_carry = operand_2.wrapping_add(1);
-        let result = operand_1.wrapping_add(operand_2_carry);
-
-        self.flag_set_zero(result);
-        self.flag_set_negative(result);
-        self.flag_set_carry(result < operand_1 || operand_2_carry < operand_2);
-
-        penalty + instruction.cycles()
-    }
-
-    #[inline]
-    fn logic(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            instruction.mnemonic() == Mnemonic::AND
-                || instruction.mnemonic() == Mnemonic::EOR
-                || instruction.mnemonic() == Mnemonic::ORA,
-            "Invalid Instruction given to logic: {instruction:?}"
-        );
-
-        let operand_1 = self.a;
-        let (operand_2, penalty) = self.fetch(instruction.mode());
-
-        let result = match instruction.mnemonic() {
-            Mnemonic::AND => operand_1 & operand_2,
-            Mnemonic::EOR => operand_1 ^ operand_2,
-            Mnemonic::ORA => operand_1 | operand_2,
-            _ => unreachable!(),
-        };
-
-        self.a = result;
-        self.flag_set_zero(result);
-        self.flag_set_negative(result);
-
-        penalty + instruction.cycles()
-    }
-
-    #[inline]
-    fn bit(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(instruction.mnemonic(), Mnemonic::BIT),
-            "Invalid Instruction given to bit: {instruction:?}"
-        );
-
-        let operand_1 = self.a;
-        let (operand_2, penalty) = self.fetch(instruction.mode());
-
-        self.flag_set_zero(operand_1 & operand_2);
-        self.sr &= 0b0011_1111;
-        self.sr |= operand_2 & 0b1100_0000;
-
-        penalty + instruction.cycles()
-    }
-
     #[inline(always)]
     fn lda_part(&mut self, addr: u16) {
         self.a = self.memory.read_byte(addr);
@@ -900,73 +858,6 @@ impl<M: Memory> CPU<M> {
         self.y = self.memory.read_byte(addr);
         self.flag_set_negative(self.y);
         self.flag_set_zero(self.y);
-    }
-
-    #[inline]
-    fn load(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::LDA | Mnemonic::LDX | Mnemonic::LDY
-            ),
-            "Invalid Instruction given to load: {instruction:?}"
-        );
-
-        let (byte, penalty) = self.fetch(instruction.mode());
-        match instruction.mnemonic() {
-            Mnemonic::LDA => self.a = byte,
-            Mnemonic::LDX => self.x = byte,
-            Mnemonic::LDY => self.y = byte,
-            _ => unreachable!(),
-        };
-
-        self.flag_set_negative(byte);
-        self.flag_set_zero(byte);
-
-        penalty + instruction.cycles()
-    }
-
-    #[inline]
-    fn transfer(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::TAX
-                    | Mnemonic::TSX
-                    | Mnemonic::TAY
-                    | Mnemonic::TXA
-                    | Mnemonic::TXS
-                    | Mnemonic::TYA
-            ),
-            "Invalid Instruction given to transfer: {instruction:?}"
-        );
-
-        let byte = match instruction.mnemonic() {
-            Mnemonic::TAX | Mnemonic::TAY => self.a,
-            Mnemonic::TSX => self.sp,
-            Mnemonic::TXA | Mnemonic::TXS => self.x,
-            Mnemonic::TYA => self.y,
-            _ => unreachable!(),
-        };
-
-        match instruction.mnemonic() {
-            Mnemonic::TXA | Mnemonic::TAY | Mnemonic::TSX | Mnemonic::TAX | Mnemonic::TYA => {
-                self.flag_set_negative(byte);
-                self.flag_set_zero(byte);
-            }
-            Mnemonic::TXS => {}
-            _ => unreachable!(),
-        }
-
-        match instruction.mnemonic() {
-            Mnemonic::TAX | Mnemonic::TSX => self.x = byte,
-            Mnemonic::TAY => self.y = byte,
-            Mnemonic::TXA | Mnemonic::TYA => self.a = byte,
-            Mnemonic::TXS => self.sp = byte,
-            _ => unreachable!(),
-        }
-
-        instruction.cycles()
     }
 
     #[inline(always)]
@@ -1016,63 +907,6 @@ impl<M: Memory> CPU<M> {
         self.flag_set_zero(result);
         self.flag_set_carry(carry);
         self.memory.write_byte(addr, result);
-    }
-
-    #[inline]
-    fn shift_rotate(&mut self, instruction: Instruction) -> usize {
-        debug_assert!(
-            matches!(
-                instruction.mnemonic(),
-                Mnemonic::ASL | Mnemonic::LSR | Mnemonic::ROL | Mnemonic::ROR
-            ),
-            "Invalid Instruction given to shift_rotate: {instruction:?}"
-        );
-
-        let operand = match instruction.mode() {
-            AddressingMode::Implied => self.a,
-            AddressingMode::ZeroPage
-            | AddressingMode::ZeroPageX
-            | AddressingMode::Absolute
-            | AddressingMode::AbsoluteX => {
-                let addr = self.resolve_address_old(instruction.mode()).0;
-                self.memory.read_byte(addr)
-            }
-            _ => unreachable!(),
-        };
-
-        let (carry, result) = match instruction.mnemonic() {
-            Mnemonic::ASL => (operand & 0b1000_0000 != 0, operand << 1),
-            Mnemonic::LSR => (operand & 0b0000_0001 != 0, operand >> 1),
-            Mnemonic::ROL => (
-                operand & 0b1000_0000 != 0,
-                (operand << 1) | if self.flag_get_carry() { 1 } else { 0 },
-            ),
-            Mnemonic::ROR => (
-                operand & 0b0000_0001 != 0,
-                (operand >> 1)
-                    | if self.flag_get_carry() {
-                        0b1000_0000
-                    } else {
-                        0
-                    },
-            ),
-            _ => unreachable!(),
-        };
-
-        self.flag_set_negative(result);
-        self.flag_set_zero(result);
-        self.flag_set_carry(carry);
-
-        match instruction.mode() {
-            AddressingMode::Implied => self.a = result,
-            AddressingMode::ZeroPage
-            | AddressingMode::ZeroPageX
-            | AddressingMode::Absolute
-            | AddressingMode::AbsoluteX => _ = self.write(instruction.mode(), result),
-            _ => unreachable!(),
-        }
-
-        instruction.cycles()
     }
 
     #[inline]
