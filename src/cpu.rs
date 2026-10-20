@@ -635,6 +635,8 @@ impl<M: Memory> CPU<M> {
                                     self.arithmetic_binary_part(addr, false);
                                 }
                             }
+                            Mnemonic::SAX => self.memory.write_byte(addr, self.a & self.x),
+
                             Mnemonic::LXA | Mnemonic::ANE => {}
                             _ => todo!(),
                         }
