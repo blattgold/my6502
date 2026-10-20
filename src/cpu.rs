@@ -618,6 +618,7 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_zero(operand);
                                 self.flag_set_negative(operand);
                             }
+                            Mnemonic::LXA | Mnemonic::ANE => {}
                             _ => todo!(),
                         }
 

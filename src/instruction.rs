@@ -125,6 +125,10 @@ pub enum Mnemonic {
     LAS,
     // LAX
     LAX,
+    // LXA
+    LXA,
+    // ANE
+    ANE,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -382,6 +386,10 @@ impl Instruction {
             0xbf => Some(Instruction(Mnemonic::LAX, AddressingMode::AbsoluteY)),
             0xa3 => Some(Instruction(Mnemonic::LAX, AddressingMode::IndirectX)),
             0xb3 => Some(Instruction(Mnemonic::LAX, AddressingMode::IndirectY)),
+            // LXA
+            0xab => Some(Instruction(Mnemonic::LXA, AddressingMode::Immediate)),
+            // ANE
+            0x8b => Some(Instruction(Mnemonic::ANE, AddressingMode::Immediate)),
             _ => None,
         }
     }
@@ -425,7 +433,9 @@ impl Instruction {
             | Mnemonic::ANC2
             | Mnemonic::ARR
             | Mnemonic::LAS
-            | Mnemonic::LAX => CycleProfile::Read,
+            | Mnemonic::LAX
+            | Mnemonic::LXA
+            | Mnemonic::ANE => CycleProfile::Read,
 
             Mnemonic::STA | Mnemonic::STX | Mnemonic::STY => CycleProfile::Write,
 

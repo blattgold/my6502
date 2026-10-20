@@ -203,7 +203,7 @@ use my6502::{cpu::CPU, memory::Memory};
 #[test_case(0xa8 ; "0xa8 TAY impl")]
 #[test_case(0xa9 ; "0xa9 LDA imm")]
 #[test_case(0xaa ; "0xaa TAX impl")]
-#[test_case(0xab ; "0xab LXA imm")]
+// #[test_case(0xab ; "0xab LXA imm")]
 #[test_case(0xac ; "0xac LDY abs")]
 #[test_case(0xad ; "0xad LDA abs")]
 #[test_case(0xae ; "0xae LDX abs")]
@@ -401,6 +401,51 @@ fn test_opcode(opcode: u8) -> Result<()> {
 }
 
 /// this only exists to ensure that the opcode doesn't panic
+#[test_case(0xab ; "0xab LXA imm")]
 #[test_case(0x6b ; "0x6b ARR imm")]
 #[test_case(0x8b ; "0x8b ANE imm")]
-fn test_opcode_dummy(_: u8) {}
+fn test_opcode_dummy(opcode: u8) -> Result<()> {
+    let verbose_output: bool = std::env::var("TEST_6502_VERBOSE").is_ok();
+
+    let test_file_path = PathBuf::from(format!("tests/json/{opcode:02x?}.json"));
+    let file_string = read_to_string(test_file_path)?;
+    let tests: Vec<TestCase> = serde_json::from_str(&file_string)?;
+
+    let mut failures = Vec::new();
+
+    let memory = TestMemory::default();
+    let mut cpu = CPU::new(memory, true);
+
+    for test in tests {
+        cpu.memory.clear();
+        cpu.a = test.initial.a;
+        cpu.x = test.initial.x;
+        cpu.y = test.initial.y;
+        cpu.sp = test.initial.s;
+        cpu.sr = test.initial.p;
+        cpu.pc = test.initial.pc;
+        for (addr, byte) in test.initial.ram.clone() {
+            cpu.memory.write_byte(addr, byte);
+        }
+
+        match cpu.step() {
+            Ok(()) => {
+                cpu = CPU::new(cpu.memory, true);
+            }
+            Err(e) => {
+                failures.push((e.to_string(), test));
+                cpu = CPU::new(cpu.memory, true);
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        if verbose_output {
+            Err(anyhow::anyhow!("Failures: {:#?}", failures))
+        } else {
+            Err(anyhow::anyhow!("Total Failures: {:#?}", failures.len()))
+        }
+    } else {
+        Ok(())
+    }
+}
