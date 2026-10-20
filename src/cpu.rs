@@ -425,6 +425,14 @@ impl<M: Memory> CPU<M> {
                         self.flag_set_negative(self.a);
                         self.flag_set_carry(carry);
                     }
+                    Mnemonic::RTI => {
+                        let sr = self.pop_stack();
+                        let return_lo = self.pop_stack();
+                        let return_hi = self.pop_stack();
+
+                        self.sr = (sr & !FLAG_BRK) | FLAG_IGN;
+                        self.pc = ((return_hi as u16) << 8) | (return_lo as u16);
+                    }
                     Mnemonic::CLC => self.sr &= !FLAG_CRY,
                     Mnemonic::CLD => self.sr &= !FLAG_DEC,
                     Mnemonic::CLI => self.sr &= !FLAG_INT,
@@ -452,107 +460,128 @@ impl<M: Memory> CPU<M> {
             }
             // with operands
             _ => {
-                let ResolvedAddress { addr, penalty, .. } =
-                    self.resolve_address(instruction.mode());
-
                 match instruction.mnemonic() {
-                    Mnemonic::ADC => {
-                        if self.flag_get_decimal() {
-                            self.adc_decimal_part(addr);
-                        } else {
-                            self.arithmetic_binary_part(addr, false);
+                    // JSR needs its own special case because it's annoying
+                    Mnemonic::JSR => {
+                        let target_lo = self.memory.read_byte(self.pc) as u16;
+                        self.pc = self.pc.wrapping_add(1);
+
+                        let return_addr = self.pc;
+                        let return_addr_hi = (return_addr >> 8) as u8;
+                        self.push_stack(return_addr_hi);
+
+                        let return_addr_lo = return_addr as u8;
+                        self.push_stack(return_addr_lo);
+
+                        let target_hi = self.memory.read_byte(self.pc) as u16;
+                        self.pc = (target_hi << 8) | target_lo;
+
+                        instruction.cycles()
+                    }
+                    _ => {
+                        let ResolvedAddress { addr, penalty, .. } =
+                            self.resolve_address(instruction.mode());
+
+                        match instruction.mnemonic() {
+                            Mnemonic::ADC => {
+                                if self.flag_get_decimal() {
+                                    self.adc_decimal_part(addr);
+                                } else {
+                                    self.arithmetic_binary_part(addr, false);
+                                }
+                            }
+                            Mnemonic::SBC | Mnemonic::USBC => {
+                                if self.flag_get_decimal() {
+                                    self.sbc_decimal_part(addr);
+                                } else {
+                                    self.arithmetic_binary_part(addr, true);
+                                }
+                            }
+                            Mnemonic::STA => {
+                                self.memory.write_byte(addr, self.a);
+                            }
+                            Mnemonic::STX => {
+                                self.memory.write_byte(addr, self.x);
+                            }
+                            Mnemonic::STY => {
+                                self.memory.write_byte(addr, self.y);
+                            }
+                            Mnemonic::LDA => {
+                                self.lda_part(addr);
+                            }
+                            Mnemonic::LDX => {
+                                self.ldx_part(addr);
+                            }
+                            Mnemonic::LDY => {
+                                self.ldy_part(addr);
+                            }
+                            Mnemonic::CMP | Mnemonic::CPX | Mnemonic::CPY => {
+                                let reg = match instruction.mnemonic() {
+                                    Mnemonic::CMP => self.a,
+                                    Mnemonic::CPX => self.x,
+                                    Mnemonic::CPY => self.y,
+                                    _ => unreachable!(),
+                                };
+
+                                let operand = !self.memory.read_byte(addr);
+                                let operand_carry = operand.wrapping_add(1);
+                                let sum = reg.wrapping_add(operand_carry);
+
+                                self.flag_set_zero(sum);
+                                self.flag_set_negative(sum);
+                                self.flag_set_carry(sum < reg || operand_carry < operand);
+                            }
+                            Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
+                                let operand = self.memory.read_byte(addr);
+                                self.a = match instruction.mnemonic() {
+                                    Mnemonic::AND => self.a & operand,
+                                    Mnemonic::EOR => self.a ^ operand,
+                                    Mnemonic::ORA => self.a | operand,
+                                    _ => unreachable!(),
+                                };
+                                self.flag_set_negative(self.a);
+                                self.flag_set_zero(self.a);
+                            }
+                            Mnemonic::BIT => {
+                                let operand = self.memory.read_byte(addr);
+
+                                self.flag_set_zero(self.a & operand);
+                                self.sr &= 0b0011_1111;
+                                self.sr |= operand & 0b1100_0000;
+                            }
+                            Mnemonic::ASL => {
+                                self.asl_mem_part(addr);
+                            }
+                            Mnemonic::LSR => {
+                                self.lsr_mem_part(addr);
+                            }
+                            Mnemonic::ROL => {
+                                self.rol_mem_part(addr);
+                            }
+                            Mnemonic::ROR => {
+                                self.ror_mem_part(addr);
+                            }
+                            Mnemonic::ISC => {
+                                self.inc_part(addr);
+
+                                if self.flag_get_decimal() {
+                                    self.sbc_decimal_part(addr);
+                                } else {
+                                    self.arithmetic_binary_part(addr, true);
+                                }
+                            }
+                            Mnemonic::JMP => self.pc = addr,
+                            _ => todo!(),
                         }
-                    }
-                    Mnemonic::SBC | Mnemonic::USBC => {
-                        if self.flag_get_decimal() {
-                            self.sbc_decimal_part(addr);
-                        } else {
-                            self.arithmetic_binary_part(addr, true);
-                        }
-                    }
-                    Mnemonic::STA => {
-                        self.memory.write_byte(addr, self.a);
-                    }
-                    Mnemonic::STX => {
-                        self.memory.write_byte(addr, self.x);
-                    }
-                    Mnemonic::STY => {
-                        self.memory.write_byte(addr, self.y);
-                    }
-                    Mnemonic::LDA => {
-                        self.lda_part(addr);
-                    }
-                    Mnemonic::LDX => {
-                        self.ldx_part(addr);
-                    }
-                    Mnemonic::LDY => {
-                        self.ldy_part(addr);
-                    }
-                    Mnemonic::CMP | Mnemonic::CPX | Mnemonic::CPY => {
-                        let reg = match instruction.mnemonic() {
-                            Mnemonic::CMP => self.a,
-                            Mnemonic::CPX => self.x,
-                            Mnemonic::CPY => self.y,
-                            _ => unreachable!(),
-                        };
 
-                        let operand = !self.memory.read_byte(addr);
-                        let operand_carry = operand.wrapping_add(1);
-                        let sum = reg.wrapping_add(operand_carry);
-
-                        self.flag_set_zero(sum);
-                        self.flag_set_negative(sum);
-                        self.flag_set_carry(sum < reg || operand_carry < operand);
+                        instruction.cycles()
+                            + if matches!(instruction.profile(), CycleProfile::Read) {
+                                penalty
+                            } else {
+                                0
+                            }
                     }
-                    Mnemonic::AND | Mnemonic::EOR | Mnemonic::ORA => {
-                        let operand = self.memory.read_byte(addr);
-                        self.a = match instruction.mnemonic() {
-                            Mnemonic::AND => self.a & operand,
-                            Mnemonic::EOR => self.a ^ operand,
-                            Mnemonic::ORA => self.a | operand,
-                            _ => unreachable!(),
-                        };
-                        self.flag_set_negative(self.a);
-                        self.flag_set_zero(self.a);
-                    }
-                    Mnemonic::BIT => {
-                        let operand = self.memory.read_byte(addr);
-
-                        self.flag_set_zero(self.a & operand);
-                        self.sr &= 0b0011_1111;
-                        self.sr |= operand & 0b1100_0000;
-                    }
-                    Mnemonic::ASL => {
-                        self.asl_mem_part(addr);
-                    }
-                    Mnemonic::LSR => {
-                        self.lsr_mem_part(addr);
-                    }
-                    Mnemonic::ROL => {
-                        self.rol_mem_part(addr);
-                    }
-                    Mnemonic::ROR => {
-                        self.ror_mem_part(addr);
-                    }
-                    Mnemonic::ISC => {
-                        self.inc_part(addr);
-
-                        if self.flag_get_decimal() {
-                            self.sbc_decimal_part(addr);
-                        } else {
-                            self.arithmetic_binary_part(addr, true);
-                        }
-                    }
-
-                    _ => todo!(),
                 }
-
-                instruction.cycles()
-                    + if matches!(instruction.profile(), CycleProfile::Read) {
-                        penalty
-                    } else {
-                        0
-                    }
             }
         }
 
