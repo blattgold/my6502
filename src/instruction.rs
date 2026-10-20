@@ -108,27 +108,18 @@ pub enum Mnemonic {
     JAMB2,
     JAMD2,
     JAMF2,
-    // USBC
     USBC,
-    // ALR
     ALR,
-    // ANC
     ANC,
     ANC2,
-    // ARR
     ARR,
-    // DCP
     DCP,
-    // ISC,
     ISC,
-    // LAS
     LAS,
-    // LAX
     LAX,
-    // LXA
     LXA,
-    // ANE
     ANE,
+    RLA,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -390,6 +381,14 @@ impl Instruction {
             0xab => Some(Instruction(Mnemonic::LXA, AddressingMode::Immediate)),
             // ANE
             0x8b => Some(Instruction(Mnemonic::ANE, AddressingMode::Immediate)),
+            // RLA
+            0x27 => Some(Instruction(Mnemonic::RLA, AddressingMode::ZeroPage)),
+            0x37 => Some(Instruction(Mnemonic::RLA, AddressingMode::ZeroPageX)),
+            0x2f => Some(Instruction(Mnemonic::RLA, AddressingMode::Absolute)),
+            0x3f => Some(Instruction(Mnemonic::RLA, AddressingMode::AbsoluteX)),
+            0x3b => Some(Instruction(Mnemonic::RLA, AddressingMode::AbsoluteY)),
+            0x23 => Some(Instruction(Mnemonic::RLA, AddressingMode::IndirectX)),
+            0x33 => Some(Instruction(Mnemonic::RLA, AddressingMode::IndirectY)),
             _ => None,
         }
     }
@@ -446,7 +445,8 @@ impl Instruction {
             | Mnemonic::DEC
             | Mnemonic::DCP
             | Mnemonic::LSR
-            | Mnemonic::ISC => CycleProfile::ReadWrite,
+            | Mnemonic::ISC
+            | Mnemonic::RLA => CycleProfile::ReadWrite,
 
             Mnemonic::BEQ
             | Mnemonic::BCS

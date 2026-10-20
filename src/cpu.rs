@@ -618,6 +618,14 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_zero(operand);
                                 self.flag_set_negative(operand);
                             }
+                            Mnemonic::RLA => {
+                                self.rol_mem_part(addr);
+
+                                let operand = self.memory.read_byte(addr);
+                                self.a = self.a & operand;
+                                self.flag_set_negative(self.a);
+                                self.flag_set_zero(self.a);
+                            }
                             Mnemonic::LXA | Mnemonic::ANE => {}
                             _ => todo!(),
                         }
