@@ -17,6 +17,9 @@ use my6502::{cpu::CPU, memory::Memory};
 ///
 /// Unstable Opcodes:
 ///  - ANE
+///  - SHA
+///  - SHX
+///  - SHY
 ///
 /// I have also uncommented some which I couldn't figure out, such as:
 ///
@@ -186,7 +189,7 @@ use my6502::{cpu::CPU, memory::Memory};
 #[test_case(0x90 ; "0x90 BCC rel")]
 #[test_case(0x91 ; "0x91 STA ind Y")]
 #[test_case(0x92 ; "0x92 JAM")]
-#[test_case(0x93 ; "0x93 SHA ind Y")]
+// #[test_case(0x93 ; "0x93 SHA ind Y")]
 #[test_case(0x94 ; "0x94 STY zpg X")]
 #[test_case(0x95 ; "0x95 STA zpg X")]
 #[test_case(0x96 ; "0x96 STX zpg Y")]
@@ -195,10 +198,10 @@ use my6502::{cpu::CPU, memory::Memory};
 #[test_case(0x99 ; "0x99 STA abs Y")]
 #[test_case(0x9a ; "0x9a TXS impl")]
 #[test_case(0x9b ; "0x9b TAS abs Y")]
-#[test_case(0x9c ; "0x9c SHY abs X")]
+// #[test_case(0x9c ; "0x9c SHY abs X")]
 #[test_case(0x9d ; "0x9d STA abs X")]
-#[test_case(0x9e ; "0x9e SHX abs Y")]
-#[test_case(0x9f ; "0x9f SHA abs Y")]
+// #[test_case(0x9e ; "0x9e SHX abs Y")]
+// #[test_case(0x9f ; "0x9f SHA abs Y")]
 #[test_case(0xa0 ; "0xa0 LDY imm")]
 #[test_case(0xa1 ; "0xa1 LDA X ind")]
 #[test_case(0xa2 ; "0xa2 LDX imm")]
@@ -409,6 +412,10 @@ fn test_opcode(opcode: u8) -> Result<()> {
 
 /// this only exists to ensure that the opcodes don't panic.
 /// It just has to do something.
+#[test_case(0x9c ; "0x9c SHY abs X")]
+#[test_case(0x9e ; "0x9e SHX abs Y")]
+#[test_case(0x93 ; "0x93 SHA ind Y")]
+#[test_case(0x9f ; "0x9f SHA abs Y")]
 #[test_case(0x83 ; "0x83 SAX X ind")]
 #[test_case(0xab ; "0xab LXA imm")]
 #[test_case(0x6b ; "0x6b ARR imm")]

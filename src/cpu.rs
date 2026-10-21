@@ -646,7 +646,11 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_negative(result);
                                 self.flag_set_carry(operand < ax || ax == operand);
                             }
-                            Mnemonic::LXA | Mnemonic::ANE => {}
+                            Mnemonic::LXA
+                            | Mnemonic::ANE
+                            | Mnemonic::SHA
+                            | Mnemonic::SHX
+                            | Mnemonic::SHY => {}
                             _ => todo!(),
                         }
 

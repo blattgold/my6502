@@ -123,6 +123,9 @@ pub enum Mnemonic {
     RRA,
     SAX,
     SBX,
+    SHA,
+    SHX,
+    SHY,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -407,6 +410,13 @@ impl Instruction {
             0x83 => Some(Instruction(Mnemonic::SAX, AddressingMode::IndirectY)),
             // SBX
             0xcb => Some(Instruction(Mnemonic::SBX, AddressingMode::Immediate)),
+            // SHA
+            0x9f => Some(Instruction(Mnemonic::SHA, AddressingMode::AbsoluteY)),
+            0x93 => Some(Instruction(Mnemonic::SHA, AddressingMode::IndirectY)),
+            // SHX
+            0x9e => Some(Instruction(Mnemonic::SHX, AddressingMode::AbsoluteY)),
+            // SHY
+            0x9c => Some(Instruction(Mnemonic::SHY, AddressingMode::AbsoluteX)),
             _ => None,
         }
     }
@@ -455,7 +465,13 @@ impl Instruction {
             | Mnemonic::ANE
             | Mnemonic::SBX => CycleProfile::Read,
 
-            Mnemonic::STA | Mnemonic::STX | Mnemonic::STY | Mnemonic::SAX => CycleProfile::Write,
+            Mnemonic::STA
+            | Mnemonic::STX
+            | Mnemonic::STY
+            | Mnemonic::SAX
+            | Mnemonic::SHA
+            | Mnemonic::SHX
+            | Mnemonic::SHY => CycleProfile::Write,
 
             Mnemonic::ASL
             | Mnemonic::ROL
