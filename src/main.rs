@@ -1,13 +1,9 @@
 use anyhow::Result;
 
-use crate::{
+use my6502::{
     cpu::CPU,
     memory::{Bus, Memory},
 };
-
-pub mod cpu;
-pub mod instruction;
-pub mod memory;
 
 fn main() -> Result<()> {
     let mut memory = Bus::new();
@@ -17,10 +13,9 @@ fn main() -> Result<()> {
     cpu.pc = 0;
     cpu.a = 15;
 
-    println!("A: {}", cpu.a);
     cpu.step()?;
-    println!("A: {}", cpu.a);
     cpu.step()?;
-    println!("A: {}", cpu.a);
+
+    println!("{}", cpu);
     Ok(())
 }

@@ -946,6 +946,18 @@ impl<M: Memory> CPU<M> {
         (self.sr & FLAG_DEC) != 0
     }
 
+    fn flag_get_interrupt(&self) -> bool {
+        (self.sr & FLAG_INT) != 0
+    }
+
+    fn flag_get_break(&self) -> bool {
+        (self.sr & FLAG_BRK) != 0
+    }
+
+    fn flag_get_ignored(&self) -> bool {
+        (self.sr & FLAG_IGN) != 0
+    }
+
     fn flag_set_zero(&mut self, result: u8) {
         if result == 0 {
             self.sr |= FLAG_ZRO
@@ -977,5 +989,58 @@ impl<M: Memory> CPU<M> {
         } else {
             self.sr &= !FLAG_OVF
         }
+    }
+}
+
+impl<M: Memory> std::fmt::Display for CPU<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let a = self.a;
+        let x = self.x;
+        let y = self.y;
+        let s = self.sp;
+        let pc = self.pc;
+
+        let char_set = '1';
+        let char_unset = '0';
+        let assign_char = |b| if b { char_set } else { char_unset };
+
+        let n = assign_char(self.flag_get_negative());
+        let v = assign_char(self.flag_get_overflow());
+        let u = assign_char(self.flag_get_ignored());
+        let b = assign_char(self.flag_get_break());
+        let d = assign_char(self.flag_get_decimal());
+        let i = assign_char(self.flag_get_interrupt());
+        let z = assign_char(self.flag_get_zero());
+        let c = assign_char(self.flag_get_carry());
+
+        let state = match self.state {
+            CPUState::Reset => "RESET",
+            CPUState::Running => "RUNNING",
+            CPUState::Jam => "JAM",
+        };
+        let cycles = self.cycles;
+
+        write!(
+            f,
+            r"
+STATE:  {state}
+CYCLES: {cycles}
+
+PC:   {pc:05}
+    $ {pc:04x}
+    % {pc:016b}
+
+A:    {a:03}        S:    {s:03}
+    $ {a:02x}             $ {s:02x}
+    % {a:08b}       % {s:08b}
+
+X:    {x:03}        Y:    {y:03}
+    $ {x:02x}             $ {y:02x}
+    % {x:08b}       % {y:08b}
+
+N V U B D I Z C
+{n} {v} {u} {b} {d} {i} {z} {c}
+",
+        )
     }
 }
