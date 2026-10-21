@@ -653,6 +653,13 @@ impl<M: Memory> CPU<M> {
                                 self.flag_set_negative(self.a);
                                 self.flag_set_zero(self.a);
                             }
+                            Mnemonic::SRE => {
+                                self.lsr_mem_part(addr);
+
+                                self.a = self.a ^ self.memory.read_byte(addr);
+                                self.flag_set_negative(self.a);
+                                self.flag_set_zero(self.a);
+                            }
                             Mnemonic::LXA
                             | Mnemonic::ANE
                             | Mnemonic::SHA
