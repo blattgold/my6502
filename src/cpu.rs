@@ -368,7 +368,13 @@ impl<M: Memory> CPU<M> {
                     Mnemonic::SEC => self.sr |= FLAG_CRY,
                     Mnemonic::SED => self.sr |= FLAG_DEC,
                     Mnemonic::SEI => self.sr |= FLAG_INT,
-                    Mnemonic::NOP => {}
+                    Mnemonic::NOP
+                    | Mnemonic::NOP1A
+                    | Mnemonic::NOP3A
+                    | Mnemonic::NOP5A
+                    | Mnemonic::NOP7A
+                    | Mnemonic::NOPDA
+                    | Mnemonic::NOPFA => {}
                     Mnemonic::JAM02
                     | Mnemonic::JAM12
                     | Mnemonic::JAM22
@@ -664,7 +670,29 @@ impl<M: Memory> CPU<M> {
                             | Mnemonic::ANE
                             | Mnemonic::SHA
                             | Mnemonic::SHX
-                            | Mnemonic::SHY => {}
+                            | Mnemonic::SHY
+                            | Mnemonic::TAS => {}
+                            Mnemonic::NOP80
+                            | Mnemonic::NOP82
+                            | Mnemonic::NOP89
+                            | Mnemonic::NOPC2
+                            | Mnemonic::NOPE2
+                            | Mnemonic::NOP04
+                            | Mnemonic::NOP44
+                            | Mnemonic::NOP64
+                            | Mnemonic::NOP14
+                            | Mnemonic::NOP34
+                            | Mnemonic::NOP54
+                            | Mnemonic::NOP74
+                            | Mnemonic::NOPD4
+                            | Mnemonic::NOPF4
+                            | Mnemonic::NOP0C
+                            | Mnemonic::NOP1C
+                            | Mnemonic::NOP3C
+                            | Mnemonic::NOP5C
+                            | Mnemonic::NOP7C
+                            | Mnemonic::NOPDC
+                            | Mnemonic::NOPFC => {}
                             _ => todo!(),
                         }
 

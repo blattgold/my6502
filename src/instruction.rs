@@ -128,6 +128,34 @@ pub enum Mnemonic {
     SHY,
     SLO,
     SRE,
+    TAS,
+    NOP1A,
+    NOP3A,
+    NOP5A,
+    NOP7A,
+    NOPDA,
+    NOPFA,
+    NOP80,
+    NOP82,
+    NOP89,
+    NOPC2,
+    NOPE2,
+    NOP04,
+    NOP44,
+    NOP64,
+    NOP14,
+    NOP34,
+    NOP54,
+    NOP74,
+    NOPD4,
+    NOPF4,
+    NOP0C,
+    NOP1C,
+    NOP3C,
+    NOP5C,
+    NOP7C,
+    NOPDC,
+    NOPFC,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -435,7 +463,36 @@ impl Instruction {
             0x5b => Some(Instruction(Mnemonic::SRE, AddressingMode::AbsoluteY)),
             0x43 => Some(Instruction(Mnemonic::SRE, AddressingMode::IndirectX)),
             0x53 => Some(Instruction(Mnemonic::SRE, AddressingMode::IndirectY)),
-            _ => None,
+            // TAS
+            0x9b => Some(Instruction(Mnemonic::TAS, AddressingMode::AbsoluteY)),
+            // UNOFFICIAL NOP
+            0x1a => Some(Instruction(Mnemonic::NOP1A, AddressingMode::Implied)),
+            0x3a => Some(Instruction(Mnemonic::NOP3A, AddressingMode::Implied)),
+            0x5a => Some(Instruction(Mnemonic::NOP5A, AddressingMode::Implied)),
+            0x7a => Some(Instruction(Mnemonic::NOP7A, AddressingMode::Implied)),
+            0xda => Some(Instruction(Mnemonic::NOPDA, AddressingMode::Implied)),
+            0xfa => Some(Instruction(Mnemonic::NOPFA, AddressingMode::Implied)),
+            0x80 => Some(Instruction(Mnemonic::NOP80, AddressingMode::Immediate)),
+            0x82 => Some(Instruction(Mnemonic::NOP82, AddressingMode::Immediate)),
+            0x89 => Some(Instruction(Mnemonic::NOP89, AddressingMode::Immediate)),
+            0xc2 => Some(Instruction(Mnemonic::NOPC2, AddressingMode::Immediate)),
+            0xe2 => Some(Instruction(Mnemonic::NOPE2, AddressingMode::Immediate)),
+            0x04 => Some(Instruction(Mnemonic::NOP04, AddressingMode::ZeroPage)),
+            0x44 => Some(Instruction(Mnemonic::NOP44, AddressingMode::ZeroPage)),
+            0x64 => Some(Instruction(Mnemonic::NOP64, AddressingMode::ZeroPage)),
+            0x14 => Some(Instruction(Mnemonic::NOP14, AddressingMode::ZeroPageX)),
+            0x34 => Some(Instruction(Mnemonic::NOP34, AddressingMode::ZeroPageX)),
+            0x54 => Some(Instruction(Mnemonic::NOP54, AddressingMode::ZeroPageX)),
+            0x74 => Some(Instruction(Mnemonic::NOP74, AddressingMode::ZeroPageX)),
+            0xd4 => Some(Instruction(Mnemonic::NOPD4, AddressingMode::ZeroPageX)),
+            0xf4 => Some(Instruction(Mnemonic::NOPF4, AddressingMode::ZeroPageX)),
+            0x0c => Some(Instruction(Mnemonic::NOP0C, AddressingMode::Absolute)),
+            0x1c => Some(Instruction(Mnemonic::NOP1C, AddressingMode::AbsoluteX)),
+            0x3c => Some(Instruction(Mnemonic::NOP3C, AddressingMode::AbsoluteX)),
+            0x5c => Some(Instruction(Mnemonic::NOP5C, AddressingMode::AbsoluteX)),
+            0x7c => Some(Instruction(Mnemonic::NOP7C, AddressingMode::AbsoluteX)),
+            0xdc => Some(Instruction(Mnemonic::NOPDC, AddressingMode::AbsoluteX)),
+            0xfc => Some(Instruction(Mnemonic::NOPFC, AddressingMode::AbsoluteX)),
         }
     }
 
@@ -481,7 +538,34 @@ impl Instruction {
             | Mnemonic::LAX
             | Mnemonic::LXA
             | Mnemonic::ANE
-            | Mnemonic::SBX => CycleProfile::Read,
+            | Mnemonic::SBX
+            | Mnemonic::NOP1A
+            | Mnemonic::NOP3A
+            | Mnemonic::NOP5A
+            | Mnemonic::NOP7A
+            | Mnemonic::NOPDA
+            | Mnemonic::NOPFA
+            | Mnemonic::NOP80
+            | Mnemonic::NOP82
+            | Mnemonic::NOP89
+            | Mnemonic::NOPC2
+            | Mnemonic::NOPE2
+            | Mnemonic::NOP04
+            | Mnemonic::NOP44
+            | Mnemonic::NOP64
+            | Mnemonic::NOP14
+            | Mnemonic::NOP34
+            | Mnemonic::NOP54
+            | Mnemonic::NOP74
+            | Mnemonic::NOPD4
+            | Mnemonic::NOPF4
+            | Mnemonic::NOP0C
+            | Mnemonic::NOP1C
+            | Mnemonic::NOP3C
+            | Mnemonic::NOP5C
+            | Mnemonic::NOP7C
+            | Mnemonic::NOPDC
+            | Mnemonic::NOPFC => CycleProfile::Read,
 
             Mnemonic::STA
             | Mnemonic::STX
@@ -489,7 +573,8 @@ impl Instruction {
             | Mnemonic::SAX
             | Mnemonic::SHA
             | Mnemonic::SHX
-            | Mnemonic::SHY => CycleProfile::Write,
+            | Mnemonic::SHY
+            | Mnemonic::TAS => CycleProfile::Write,
 
             Mnemonic::ASL
             | Mnemonic::ROL

@@ -20,6 +20,7 @@ use my6502::{cpu::CPU, memory::Memory};
 ///  - SHA
 ///  - SHX
 ///  - SHY
+///  - TAS
 ///
 /// I have also uncommented some which I couldn't figure out, such as:
 ///
@@ -197,7 +198,7 @@ use my6502::{cpu::CPU, memory::Memory};
 #[test_case(0x98 ; "0x98 TYA impl")]
 #[test_case(0x99 ; "0x99 STA abs Y")]
 #[test_case(0x9a ; "0x9a TXS impl")]
-#[test_case(0x9b ; "0x9b TAS abs Y")]
+// #[test_case(0x9b ; "0x9b TAS abs Y")]
 // #[test_case(0x9c ; "0x9c SHY abs X")]
 #[test_case(0x9d ; "0x9d STA abs X")]
 // #[test_case(0x9e ; "0x9e SHX abs Y")]
@@ -412,6 +413,7 @@ fn test_opcode(opcode: u8) -> Result<()> {
 
 /// this only exists to ensure that the opcodes don't panic.
 /// It just has to do something.
+#[test_case(0x9b ; "0x9b TAS abs Y")]
 #[test_case(0x9c ; "0x9c SHY abs X")]
 #[test_case(0x9e ; "0x9e SHX abs Y")]
 #[test_case(0x93 ; "0x93 SHA ind Y")]
