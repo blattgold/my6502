@@ -5,9 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
-clap = "4.6.7"
-clap-repl = "0.3.2"
-input-macro = "0.2.0"
 
 [dev-dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
