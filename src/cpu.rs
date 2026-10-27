@@ -185,7 +185,7 @@ impl<M: Memory> CPU<M> {
         resolved
     }
 
-    /// return: (value, page cross penalty value)
+    /// return: penalty
     #[inline]
     pub fn fetch(&mut self, addressing_mode: AddressingMode) -> u8 {
         debug_assert!(
@@ -197,7 +197,6 @@ impl<M: Memory> CPU<M> {
         self.memory.read_byte(addr)
     }
 
-    /// return: penalty
     #[inline]
     pub fn write(&mut self, addressing_mode: AddressingMode, byte: u8) {
         debug_assert!(
